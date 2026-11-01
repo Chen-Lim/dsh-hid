@@ -32,11 +32,11 @@
 ### Milestone 2：Cordis 服务端插件 (`dsh-plugin-peripheral-server`) (v0.1.0)
 - **目标**：完成 Harness 内部插件开发，跑通事件监听、槽位路由与 WebSocket 广播。
 - **任务清单**：
-  - [ ] 实现 `SessionRouter`：F1-F12 槽位分配、会话释放与焦点跟踪逻辑。
-  - [ ] 实现 `PeripheralServerService`：基于 Cordis 微内核架构的插件类。
-  - [ ] 接入 DSH 事件源：订阅 `agent/status`、`agent/created`、`agent/disposed`、`interaction/user-questions`。
-  - [ ] 启动本地 WebSocket Server（`127.0.0.1:45678`），实现 JSON-RPC 指令分发（切换焦点、调节思考预算）。
-  - [ ] 编写集成测试：模拟 Agent 生命周期，验证 WebSocket 能够精准收到状态广播。
+  - [x] 实现 `SessionRouter`：F1-F12 槽位分配、会话释放与焦点跟踪逻辑。
+  - [x] 实现 `PeripheralServerService`：基于 Cordis 微内核架构的插件类。
+  - [x] 接入 DSH 事件源：订阅 `agent/status`、`agent/created`、`agent/disposed`、`interaction/user-questions`。
+  - [x] 启动本地 WebSocket Server（`127.0.0.1:45678`），实现 JSON-RPC 指令分发（切换焦点、调节思考预算）。
+  - [x] 编写集成测试：模拟 Agent 生命周期，验证 WebSocket 能够精准收到状态广播。
 - **交付物**：符合 DSH 加载规范的独立 Cordis 插件。
 
 ---
