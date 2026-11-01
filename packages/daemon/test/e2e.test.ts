@@ -99,7 +99,7 @@ describe('Daemon E2E Multi-Slot Lifecycle & Hardware Interaction Flow', () => {
 
     expect(receivedCalls).toContainEqual({
       method: METHOD_SELECT_OPTION,
-      params: { action: 'ACCEPT' },
+      params: { slotIndex: 1, optionIndex: 0, action: 'ACCEPT' },
     });
 
     // 5. User switches focus to Slot 2 via physical F2 key

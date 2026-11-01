@@ -289,16 +289,31 @@ export class DaemonClient {
         }
         case 'knob': {
           if (event.action === 'stepUp' || event.action === 'stepDown') {
-            await this.sendRequest(METHOD_SET_BRAINPOWER, { direction: event.action });
+            await this.sendRequest(METHOD_SET_BRAINPOWER, {
+              slotIndex: this.focusedSlot,
+              direction: event.action,
+            });
           }
           break;
         }
         case 'option': {
-          await this.sendRequest(METHOD_SELECT_OPTION, { action: event.action });
+          const slot = this.slots.find((s) => s.slotIndex === this.focusedSlot);
+          let optionIndex = 0;
+          if (slot?.question?.options) {
+            const found = slot.question.options.indexOf(event.action);
+            if (found !== -1) optionIndex = found;
+          }
+          await this.sendRequest(METHOD_SELECT_OPTION, {
+            slotIndex: this.focusedSlot,
+            optionIndex,
+            action: event.action,
+          });
           break;
         }
         case 'abort': {
-          await this.sendRequest(METHOD_ABORT, {});
+          await this.sendRequest(METHOD_ABORT, {
+            slotIndex: this.focusedSlot,
+          });
           break;
         }
       }

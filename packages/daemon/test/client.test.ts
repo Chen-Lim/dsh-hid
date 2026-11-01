@@ -138,9 +138,9 @@ describe('DaemonClient', () => {
 
     expect(receivedRequests).toHaveLength(4);
     expect(receivedRequests[0]).toEqual({ method: METHOD_SWITCH_FOCUS, params: { slotIndex: 4 } });
-    expect(receivedRequests[1]).toEqual({ method: METHOD_SET_BRAINPOWER, params: { direction: 'stepUp' } });
-    expect(receivedRequests[2]).toEqual({ method: METHOD_SELECT_OPTION, params: { action: 'ACCEPT' } });
-    expect(receivedRequests[3]).toEqual({ method: METHOD_ABORT, params: {} });
+    expect(receivedRequests[1]).toEqual({ method: METHOD_SET_BRAINPOWER, params: { slotIndex: 1, direction: 'stepUp' } });
+    expect(receivedRequests[2]).toEqual({ method: METHOD_SELECT_OPTION, params: { slotIndex: 1, optionIndex: 0, action: 'ACCEPT' } });
+    expect(receivedRequests[3]).toEqual({ method: METHOD_ABORT, params: { slotIndex: 1 } });
 
     await client.stop();
   });

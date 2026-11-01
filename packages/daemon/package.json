@@ -20,7 +20,7 @@
   "scripts": {
     "build": "tsc -b",
     "clean": "rm -rf dist *.tsbuildinfo",
-    "typecheck": "tsc -b --noEmit",
+    "typecheck": "tsc -b",
     "test": "vitest run"
   },
   "keywords": [
@@ -38,6 +38,8 @@
   },
   "devDependencies": {
     "@types/ws": "^8.5.14",
+    "cordis": "^4.0.0-rc.12",
+    "dsh-plugin-peripheral-server": "workspace:*",
     "typescript": "^5.7.3",
     "vitest": "^3.0.7"
   }
