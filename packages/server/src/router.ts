@@ -298,9 +298,9 @@ export class SessionRouter {
 
     if (patch.status !== undefined) internal.status = patch.status;
     if (patch.brainpower !== undefined) internal.brainpower = patch.brainpower;
-    if (patch.activeTool !== undefined) internal.activeTool = patch.activeTool;
-    if (patch.question !== undefined) internal.question = patch.question;
-    if (patch.sessionId !== undefined) internal.sessionId = patch.sessionId;
+    if ('activeTool' in patch) internal.activeTool = patch.activeTool;
+    if ('question' in patch) internal.question = patch.question;
+    if ('sessionId' in patch) internal.sessionId = patch.sessionId;
     internal.lastAccessedAt = Date.now();
 
     const sanitized = this.sanitizeSlot(internal);
