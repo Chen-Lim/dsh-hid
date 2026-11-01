@@ -10,6 +10,9 @@
     },
     {
       "path": "./packages/server"
+    },
+    {
+      "path": "./packages/daemon"
     }
   ]
 }

@@ -1,0 +1,44 @@
+{
+  "name": "@dsh-hid/daemon",
+  "version": "0.1.0-alpha.0",
+  "description": "Hardware daemon for DSH peripheral bridge supporting Mock, VIA Raw HID and Nuphy Air V3 adapters",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "bin": {
+    "dsh-daemon": "./dist/cli.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -b",
+    "clean": "rm -rf dist *.tsbuildinfo",
+    "typecheck": "tsc -b --noEmit",
+    "test": "vitest run"
+  },
+  "keywords": [
+    "deepseek-harness",
+    "hid",
+    "daemon",
+    "via",
+    "nuphy"
+  ],
+  "author": "Carl Lin",
+  "license": "MIT",
+  "dependencies": {
+    "@dsh-hid/protocol": "workspace:*",
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@types/ws": "^8.5.14",
+    "typescript": "^5.7.3",
+    "vitest": "^3.0.7"
+  }
+}

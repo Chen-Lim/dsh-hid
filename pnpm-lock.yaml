@@ -173,6 +173,25 @@ importers:
         specifier: ^3.0.7
         version: 3.2.7(@types/node@26.6.6)
 
+  packages/daemon:
+    dependencies:
+      '@dsh-hid/protocol':
+        specifier: workspace:*
+        version: link:../protocol
+      ws:
+        specifier: ^8.18.0
+        version: 8.22.1
+    devDependencies:
+      '@types/ws':
+        specifier: ^8.5.14
+        version: 8.18.2
+      typescript:
+        specifier: ^5.7.3
+        version: 5.9.3
+      vitest:
+        specifier: ^3.0.7
+        version: 3.2.7(@types/node@26.6.6)
+
   packages/protocol:
     devDependencies:
       typescript:
