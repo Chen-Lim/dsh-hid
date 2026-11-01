@@ -273,7 +273,7 @@ export function validateNuphySessionResponse(response: Uint8Array, challenge: Ui
  */
 export function buildNuphyWriteRequest(
   address: number,
-  payload: Uint8Array | number[],
+  payload: Uint8Array | readonly number[] | number[],
   sessionKey: number,
 ): Uint8Array {
   const payloadArr = Array.isArray(payload) ? payload : Array.from(payload);
