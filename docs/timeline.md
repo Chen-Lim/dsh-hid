@@ -44,12 +44,12 @@
 ### Milestone 3：Hardware Daemon 与多硬件适配器 (v0.5.0)
 - **目标**：实现独立运行的守护进程，接入 Mock 模拟器、VIA 键盘与 Nuphy Air V3 键盘。
 - **任务清单**：
-  - [ ] 实现 `@dsh-hid/daemon` 核心客户端框架与自动重连机制。
-  - [ ] 实现 `MockAdapter`：终端彩色 ASCII 模拟 12 键灯效与旋钮旋转。
-  - [ ] 实现 `NuphyV3Adapter`（移植 `Keyphore` 逆向成果）：
-    - [ ] 64 字节报文封装与 SessionKey XOR 加密。
-    - [ ] 主背光与侧边指示灯状态写入。
-  - [ ] 实现 `ViaRawhidAdapter`：32 字节 Raw HID 帧读写，支持 F 键与旋钮上报。
+  - [x] 实现 `@dsh-hid/daemon` 核心客户端框架与自动重连机制。
+  - [x] 实现 `MockAdapter`：终端彩色 ASCII 模拟 12 键灯效与旋钮旋转。
+  - [x] 实现 `NuphyV3Adapter`（移植 `Keyphore` 逆向成果）：
+    - [x] 64 字节报文封装与 SessionKey XOR 加密。
+    - [x] 主背光与侧边指示灯状态写入。
+  - [x] 实现 `ViaRawhidAdapter`：32 字节 Raw HID 帧读写，支持 F 键与旋钮上报。
 - **交付物**：包含 CLI 的硬件守护进程，支持 `--adapter=mock|nuphy|via` 参数。
 
 ---
