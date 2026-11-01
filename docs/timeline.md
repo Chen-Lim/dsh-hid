@@ -20,11 +20,11 @@
 ### Milestone 1：协议规范与 Monorepo 脚手架 (v0.1.0-alpha)
 - **目标**：搭建规范的 TypeScript 开发工程，完成共享协议定义与全链路数据类型约束。
 - **任务清单**：
-  - [ ] 配置 `pnpm-workspace.yaml` 与统一 `tsconfig.json`。
-  - [ ] 实现 `@dsh-hid/protocol` 协议库：
-    - [ ] 导出 `AgentPeripheralStatus`、`SlotInfo`、`BrainpowerDirection` 等核心数据模型。
-    - [ ] 实现 JSON-RPC 2.0 请求、响应与通知的编解码工具函数。
-    - [ ] 编写协议往返序列化单元测试。
+  - [x] 配置 `pnpm-workspace.yaml` 与统一 `tsconfig.json`。
+  - [x] 实现 `@dsh-hid/protocol` 协议库：
+    - [x] 导出 `AgentPeripheralStatus`、`SlotInfo`、`BrainpowerDirection` 等核心数据模型。
+    - [x] 实现 JSON-RPC 2.0 请求、响应与通知的编解码工具函数。
+    - [x] 编写协议往返序列化单元测试。
 - **交付物**：可编译发布的 `@dsh-hid/protocol` 包与单元测试套件。
 
 ---
