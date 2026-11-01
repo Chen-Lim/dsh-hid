@@ -1,6 +1,6 @@
 {
   "name": "@dsh-hid/daemon",
-  "version": "0.1.0-alpha.0",
+  "version": "1.0.0",
   "description": "Hardware daemon for DSH peripheral bridge supporting Mock, VIA Raw HID and Nuphy Air V3 adapters",
   "type": "module",
   "main": "./dist/index.js",
@@ -19,6 +19,7 @@
   ],
   "scripts": {
     "build": "tsc -b",
+    "postbuild": "chmod +x dist/cli.js",
     "clean": "rm -rf dist *.tsbuildinfo",
     "typecheck": "tsc -b",
     "test": "vitest run"

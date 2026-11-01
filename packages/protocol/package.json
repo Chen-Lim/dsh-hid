@@ -1,6 +1,6 @@
 {
   "name": "@dsh-hid/protocol",
-  "version": "0.1.0-alpha.0",
+  "version": "1.0.0",
   "description": "Shared protocol models and JSON-RPC codec for DeepSeek Harness HID peripheral bridge",
   "type": "module",
   "main": "./dist/index.js",

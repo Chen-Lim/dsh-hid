@@ -1,6 +1,6 @@
 {
   "name": "dsh-plugin-peripheral-server",
-  "version": "0.1.0-alpha.0",
+  "version": "1.0.0",
   "description": "DeepSeek Harness Cordis plugin for physical HID peripheral status bridge and input routing",
   "type": "module",
   "main": "./dist/index.js",
