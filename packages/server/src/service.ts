@@ -84,9 +84,7 @@ function extractSessionId(target: string | DshAgentRef | DshSessionRef | undefin
 }
 
 export class PeripheralServerService extends Service {
-  public static readonly inject = {
-    optional: ['agentLoop', 'session', 'sessions', 'interaction', 'approval', 'sessionController'],
-  };
+  public static readonly inject = [];
 
   public readonly router: SessionRouter;
   public readonly wsServer: PeripheralWsServer;
@@ -203,6 +201,9 @@ export class PeripheralServerService extends Service {
     this.ctx.on('dispose', async () => {
       await this.stop();
     });
+
+    // Automatically start WebSocket server on initialization
+    void this.start();
   }
 
   private ensureAndUpdateSession(
@@ -482,11 +483,7 @@ export class PeripheralServerService extends Service {
 }
 
 export function apply(ctx: Context, config?: PeripheralServerConfig): void {
-  const service = ctx.plugin(PeripheralServerService, config);
-  // Ensure the WebSocket server is started upon mounting
-  if (ctx.peripheralServer) {
-    void ctx.peripheralServer.start();
-  }
+  ctx.plugin(PeripheralServerService, config);
 }
 
 declare module 'cordis' {
