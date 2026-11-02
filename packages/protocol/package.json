@@ -27,7 +27,7 @@
     "json-rpc",
     "protocol"
   ],
-  "author": "Carl Lin",
+  "author": "Chen-Lim",
   "license": "MIT",
   "devDependencies": {
     "typescript": "^5.7.3",

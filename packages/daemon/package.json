@@ -33,7 +33,7 @@
     "via",
     "nuphy"
   ],
-  "author": "Carl Lin",
+  "author": "Chen-Lim",
   "license": "MIT",
   "dependencies": {
     "@dsh-hid/protocol": "workspace:*",
