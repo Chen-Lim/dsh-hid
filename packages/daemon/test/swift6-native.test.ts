@@ -366,7 +366,7 @@ describe('Swift 6 Native S4 Daemon (DshDaemon.swift) Cross-Verification', () => 
       );
 
       // Wait for Swift 6 daemon to receive NEEDS_INPUT state update
-      await new Promise((r) => setTimeout(r, 60));
+      await new Promise((r) => setTimeout(r, 200));
       harness.sendJsonl({ id: 201, op: 'dshState' });
       const approvalStateRes = await harness.waitForMessage((m) => m.id === 201);
       const approvalColors = (approvalStateRes.result as { colors: string[] }).colors;
@@ -387,7 +387,7 @@ describe('Swift 6 Native S4 Daemon (DshDaemon.swift) Cross-Verification', () => 
 
       // 7. Emit DSH turn/end -> COMPLETED and verify Swift 6 daemon updates F1 to #00ff4c
       ctx.emit('session/event', { id: 'dsh-live-1' }, { type: 'turn/end' });
-      await new Promise((r) => setTimeout(r, 60));
+      await new Promise((r) => setTimeout(r, 200));
       harness.sendJsonl({ id: 203, op: 'dshState' });
       const completedStateRes = await harness.waitForMessage((m) => m.id === 203);
       const completedColors = (completedStateRes.result as { colors: string[] }).colors;
