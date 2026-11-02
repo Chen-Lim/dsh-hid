@@ -1979,12 +1979,22 @@ final class DshWebSocketDaemon: @unchecked Sendable {
             let action = try rpcSession.handleIncomingJson(text, nowMs: nowMs)
             switch action {
             case .renderRequired(let sideChanged):
+                let activeCount = rpcSession.slotsByIndex.values.filter { $0.status != .inactive }.count
+                emit([
+                    "event": "dshStateSynced",
+                    "focusedSlot": rpcSession.focusedSlot,
+                    "activeSlotCount": activeCount,
+                    "sideChanged": sideChanged
+                ])
                 renderToHardwareIfAvailable(nowMs: nowMs, updateSide: sideChanged)
             case .serverShuttingDown:
+                emit(["event": "dshServerShuttingDown"])
                 if server.device.connected && server.device.recoveryPending {
                     _ = try? server.device.restore()
                 }
-            case .rpcResponse, .none:
+            case .rpcResponse(let id, let ok):
+                emit(["event": "dshRpcResponse", "id": id, "ok": ok])
+            case .none:
                 break
             }
         } catch {
@@ -2032,6 +2042,7 @@ final class JSONServer {
     let keys = KeyHooks()
     let trigger = TriggerHooks()
     let bluetooth = BluetoothKeyboard()
+    weak var wsDaemon: DshWebSocketDaemon?
     private var pending = [[String: Any]]()
     private var processing = false
     private var stopping = false
@@ -2121,7 +2132,40 @@ final class JSONServer {
                 return ["colors": hexColors(frame), "ledCount": 84]
             }
             return try device.paint(frame, verify: verify)
-        case "quit": stopping = true; return ["quitting": true]
+        case "dshState":
+            guard let daemon = wsDaemon else { throw failure("NO_WS_DAEMON", "WebSocket daemon is not enabled.") }
+            let frame = daemon.rpcSession.renderFrame(pulseFocused: false)
+            return [
+                "focusedSlot": daemon.rpcSession.focusedSlot,
+                "activeSlotCount": daemon.rpcSession.slotsByIndex.values.filter { $0.status != .inactive }.count,
+                "colors": hexColors(frame)
+            ]
+        case "dshSendRpc":
+            guard let daemon = wsDaemon else { throw failure("NO_WS_DAEMON", "WebSocket daemon is not enabled.") }
+            guard let rpcType = command["rpc"] as? String else { throw failure("INVALID_RPC", "dshSendRpc requires rpc type.") }
+            let jsonString: String
+            switch rpcType {
+            case "switchFocus":
+                let slot = command["slotIndex"] as? Int ?? 1
+                jsonString = try daemon.rpcSession.buildSwitchFocusRequest(slotIndex: slot)
+            case "setBrainpower":
+                let dir = command["direction"] as? String ?? "stepUp"
+                let slot = command["slotIndex"] as? Int
+                jsonString = try daemon.rpcSession.buildSetBrainpowerRequest(direction: dir, slotIndex: slot)
+            case "selectOption":
+                let action = command["action"] as? String ?? "ACCEPT"
+                let optIdx = command["optionIndex"] as? Int
+                let slot = command["slotIndex"] as? Int
+                jsonString = try daemon.rpcSession.buildSelectOptionRequest(action: action, optionIndex: optIdx, slotIndex: slot)
+            case "abort":
+                let slot = command["slotIndex"] as? Int
+                jsonString = try daemon.rpcSession.buildAbortRequest(slotIndex: slot)
+            default:
+                throw failure("UNKNOWN_RPC", "Unknown dshSendRpc type: \(rpcType)")
+            }
+            daemon.sendRpcRequest(jsonString)
+            return ["sent": true, "jsonrpc": jsonString]
+        case "quit": wsDaemon?.stop(); stopping = true; return ["quitting": true]
         default: throw failure("UNKNOWN_OPERATION", "Unknown operation: \(op)")
         }
     }
@@ -2877,6 +2921,7 @@ if let wsUrlString = wsUrlString {
         diagnostic("Invalid WebSocket URL: \(wsUrlString)"); Darwin.exit(64)
     }
     let daemon = DshWebSocketDaemon(url: url, server: server)
+    server.wsDaemon = daemon
     wsDaemon = daemon
     daemon.start()
 }
@@ -2889,24 +2934,25 @@ let signals = [SIGINT, SIGTERM, SIGHUP].map { value -> DispatchSourceSignal in
     source.resume()
     return source
 }
-if wsDaemon == nil {
-    DispatchQueue.global(qos: .userInitiated).async {
-        while let line = readLine(strippingNewline: true) {
-            if line.utf8.count > 32768 {
-                DispatchQueue.main.async { emit(["id": NSNull(), "ok": false, "error": failure("REQUEST_TOO_LARGE", "A JSONL request must be smaller than 32 KiB.").json]) }
-                continue
-            }
-            DispatchQueue.main.async {
-                do {
-                    guard let command = try JSONSerialization.jsonObject(with: Data(line.utf8)) as? [String: Any] else {
-                        throw failure("INVALID_JSON", "Every line must be a JSON object.")
-                    }
-                    server.enqueue(command)
-                } catch {
-                    emit(["id": NSNull(), "ok": false, "error": failure("INVALID_JSON", "Invalid JSON request.").json])
+let hasWsDaemon = (wsDaemon != nil)
+DispatchQueue.global(qos: .userInitiated).async {
+    while let line = readLine(strippingNewline: true) {
+        if line.utf8.count > 32768 {
+            DispatchQueue.main.async { emit(["id": NSNull(), "ok": false, "error": failure("REQUEST_TOO_LARGE", "A JSONL request must be smaller than 32 KiB.").json]) }
+            continue
+        }
+        DispatchQueue.main.async {
+            do {
+                guard let command = try JSONSerialization.jsonObject(with: Data(line.utf8)) as? [String: Any] else {
+                    throw failure("INVALID_JSON", "Every line must be a JSON object.")
                 }
+                server.enqueue(command)
+            } catch {
+                emit(["id": NSNull(), "ok": false, "error": failure("INVALID_JSON", "Invalid JSON request.").json])
             }
         }
+    }
+    if !hasWsDaemon {
         DispatchQueue.main.async { server.finishInput() }
     }
 }

@@ -6,11 +6,14 @@
   "packageManager": "pnpm@12.16.1",
   "scripts": {
     "build": "pnpm --recursive run build",
+    "build:native": "pnpm --filter @dsh-hid/daemon run build:native",
     "test": "pnpm --recursive run test",
+    "test:native": "pnpm --filter @dsh-hid/daemon run test:native",
     "typecheck": "tsc -b",
     "clean": "pnpm --recursive run clean",
     "daemon:mock": "node packages/daemon/dist/cli.js --adapter=mock",
     "daemon:nuphy": "node packages/daemon/dist/cli.js --adapter=nuphy",
+    "daemon:native": "packages/daemon/bin/dsh-daemon --daemon",
     "daemon:via": "node packages/daemon/dist/cli.js --adapter=via"
   },
   "devDependencies": {
