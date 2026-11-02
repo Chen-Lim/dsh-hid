@@ -163,25 +163,27 @@ Daemon 建立连接后，服务端立即下发一次快照，同步全部 12 个
 
 ---
 
-## 4. Nuphy Air V3 逆向 64 字节报文规范 (Keyphore-Derived)
+## 4. NuPhy Air V3 (S4) 64 字节官方协议规范摘要
 
-借鉴 `Keyphore` 逆向 Nuphy 固件的研究成果：
+完整的字节级协议定义、双固件 Schema（17/22 字节）、HSV 色彩量化模型与 Journal 备份恢复状态机详见 **[《NuPhy Air V3 (S4) 硬件通信协议白皮书》](./nuphy-s4-whitepaper.md)**。核心规则摘要如下：
 
-### 4.1 会话握手与 SessionKey 交换
-1. **发起握手 (TemporarySession)**：
-   - Host 发送 64 字节报文：`Byte 0 = 0x55` (Host Direction), `Byte 1 = 0xEE` (Cmd TemporarySession), 附带 56 字节随机 Challenge。
-2. **设备应答**：
-   - 键盘返回 `0xAA` 头，并在特定偏移携带生成的 `SessionKey`。
-3. **后续报文加密**：
-   - 所有后续读写指令的 Payload 与参数均与 `SessionKey` 执行按位异或（XOR），并在 `Byte 3` 计算校验和 `checksum`。
+### 4.1 无损会话推导 (`0xA1`) 与物理档位探测 (`0xA0`)
+1. **无损推导 `SessionKey` (`0xA1`)**：
+   - 废除早期逆向中会覆写键盘 RAM 会话密钥的 `0xEE` 握手，改用只读指令 `0xA1`（`Byte 0 = 0x55, Byte 1 = 0xA1, length = 8, key = 0`）。
+   - 利用固件信息第 3 字节恒为 `0xAA` 的特性，直接由响应报文计算 `SessionKey = raw[11] ^ 0xAA`，并解析固件版本 `info[2].info[1].info[0].(info[4] | (info[5] << 8))`。
+2. **Mac / Win 档位路由 (`0xA0`)**：
+   - 通过 `0xA0` 读取当前物理开关档位（`0` = Mac, `1` = Win）作为 `lightingProfile`，并在后续 `0xD5` / `0xD6` / `0xD8` 报文的 `Byte 7` (`handle`) 中携带该档位。
+3. **报文加密与累加校验和**：
+   - 路由头（`Bytes 4..7`）与有效载荷（`Bytes 8..(8+length-1)`）均与 `SessionKey` 执行按位异或（XOR），尾部 `0x00` 填充字节不参与异或；`Byte 3` 为 `Bytes 4..63` 的 8 位无符号累加校验和。
 
-### 4.2 背光与侧边指示灯写入
-- **写入指令**：`Command::SetData = 0xD6`。
-- **寄存器地址**：
-  - 主背光模式地址：`0x0001`
-  - 侧边/顶部节奏灯状态地址：`0x0002`
-- **预设颜色序列**：
-  - 运行中（蓝色）：`BLUE_EXECUTION_MAIN` (`[3, 100, 3, 0, 1, 0, 0, 0, 0xff]`)
-  - 需交互（橙色）：`ORANGE_ATTENTION_MAIN` (`[3, 100, 3, 0, 1, 0, 0xff, 0x84, 0]`)
-  - 完成（绿色）：`GREEN_COMPLETION_MAIN` (`[3, 100, 3, 0, 1, 0, 0, 0xff, 0]`)
-  - 关灯/复位：`SIGNAL_OFF_MAIN` (`[3, 0, 3, 0, 1, 0, 0, 0, 0]`)
+### 4.2 84 键逐键 RGB 流式控制 (`0xD6` + `0xD8` + `0xD2`)
+- **进入逐键模式 (`Arm`)**：先将原始 `0xD5` 状态（`1.0.16.6` 为 17 字节，`1.0.17.6+` 为 22 字节）与 `0xD2` 312 字节渲染色原子备份至磁盘 Journal，随后通过 `0xD6` 写入 `Effect 21`（自定义逐键模式，硬件亮度 `100`，RGB 模式 `1`），不再执行单独的 `address = 1` 亮度写入。
+- **流式增量刷写 (`0xD8`)**：按 `[ledIndex, R, G, B]` 4 字节记录打包（单包最多 13 颗灯珠 / 52 字节），仅向有颜色变化的 `0..83` 号主键灯位发送增量更新。
+- **Codex Micro 标准状态色彩**：
+  - 空闲 (`IDLE`)：`#FFFFFF` (`[0xFF, 0xFF, 0xFF]`)
+  - 运行中 (`RUNNING`)：`#304FFE` (`[0x30, 0x4F, 0xFE]`)
+  - 需交互 (`NEEDS_INPUT`)：`#FF6D00` (`[0xFF, 0x6D, 0x00]`)
+  - 已完成 (`COMPLETED`)：`#00FF4C` (`[0x00, 0xFF, 0x4C]`)
+  - 报错 (`ERROR`)：`#FF0033` (`[0xFF, 0x00, 0x33]`)
+  - 未分配 (`INACTIVE`)：`#000000` (`[0x00, 0x00, 0x00]`)
+- **无损恢复 (`Restore`)**：守护进程退出、断开或重连时，从磁盘 Journal 恢复用户原有的完整灯效配置与自定义调色板，并通过 `0xD5` / `0xD2` 回读校验。
