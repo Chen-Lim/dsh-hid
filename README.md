@@ -40,8 +40,9 @@
 │  ┌───────────────────────────────────────────────────────┐  │
 │  │     dsh-plugin-peripheral-server (Cordis 插件)        │  │
 │  │   • SessionRouter (F1-F12 槽位与焦点状态机)           │  │
-│  │   • DSH Agent 生命周期与交互事件监听 (agent/*)        │  │
-│  │   • WebSocket JSON-RPC 服务端 (:45678)                │  │
+│  │   • DSH 真实事件订阅 (api-session/*, session/*)       │  │
+│  │   • ApprovalArbiter (approval/request 并发审批仲裁)   │  │
+│  │   • WebSocket JSON-RPC 2.0 服务端 (:45678)            │  │
 │  └──────────────────────────┬────────────────────────────┘  │
 └─────────────────────────────┼───────────────────────────────┘
                               │ WebSocket (JSON-RPC 2.0)
@@ -49,15 +50,16 @@
 │              @dsh-hid/daemon (独立硬件守护进程)              │
 │                                                             │
 │   • 自动重连管理与 Snapshot 全量状态同步                     │
-│   • 硬件输入事件调度器 (按键/旋钮 -> RPC 指令)              │
-│   • 多硬件适配层 (HardwareAdapter):                         │
+│   • 硬件输入事件调度器 (物理按键 -> JSON-RPC 指令)           │
+│   • 原生与多硬件驱动层:                                      │
+│     ├─ DshDaemon.swift  (Swift 6 原生 NuPhy S4 84 键驱动)    │
 │     ├─ MockAdapter      (终端 ANSI 12 键彩显模拟器)         │
-│     ├─ NuphyV3Adapter   (Keyphore 逆向协议 / 64B XOR 握手)  │
+│     ├─ NuphyV3Adapter   (TS 64B XOR 协议适配器)             │
 │     └─ ViaRawhidAdapter (标准 QMK/VIA 32B Raw HID 通信)     │
 └─────────────────────────────┬───────────────────────────────┘
-                              │ USB HID Report
+                              │ USB HID Report (IOHIDManager)
                    ┌──────────▼───────────┐
-                   │    物理硬件 / 键盘    │
+                   │  NuPhy Air75 V3 等   │
                    └──────────────────────┘
 ```
 
@@ -90,8 +92,11 @@ pnpm build
 ### 4.2 运行测试套件
 
 ```bash
-# 执行全部单元测试与 E2E 端到端集成测试
+# 执行全部单元测试与 E2E 端到端集成测试（含 Swift 6 原生交叉测试）
 pnpm test
+
+# 执行 Swift 6 原生 S4 驱动内置 6200+ 项硬件协议自检
+pnpm test:native
 
 # 执行严格 TypeScript 类型检查
 pnpm typecheck
@@ -118,19 +123,16 @@ await ctx.start();
 独立终端中启动硬件守护进程，支持三种模式：
 
 ```bash
-# 1. 终端 ASCII 矩阵模拟器（免物理硬件，强烈推荐测试与体验）
-pnpm daemon:mock
-# 或直接通过构建产物运行：
-node packages/daemon/dist/cli.js --adapter=mock
+# 1. Swift 6 原生 NuPhy Air75 V3 (S4) 守护进程（推荐实机使用，支持 84 键逐键 RGB 与无损恢复）
+pnpm daemon:native
+# 或指定自定义 WebSocket 地址：
+./packages/daemon/bin/dsh-daemon --ws ws://127.0.0.1:45678/peripheral/v1
 
-# 2. Nuphy Air75/Air96 V3 键盘模式（Keyphore 协议）
-pnpm daemon:nuphy
+# 2. 终端 ASCII 矩阵模拟器（免物理硬件，推荐开发联调与体验）
+pnpm daemon:mock
 
 # 3. 标准 VIA/QMK 客制化键盘模式（Raw HID）
 pnpm daemon:via
-
-# 自定义服务地址
-node packages/daemon/dist/cli.js --adapter=mock --url=ws://127.0.0.1:45678/peripheral/v1
 ```
 
 ---
@@ -155,6 +157,7 @@ node packages/daemon/dist/cli.js --adapter=mock --url=ws://127.0.0.1:45678/perip
 
 ## 6. 文档中心索引 (Documentation Index)
 
+- **NuPhy Air V3 (S4) 官方硬件协议白皮书**：[`docs/spec/nuphy-s4-whitepaper.md`](./docs/spec/nuphy-s4-whitepaper.md)
 - 需求与市场分析：[`docs/mrd&prd.md`](./docs/mrd&prd.md)
 - 系统架构与安全隔离：[`docs/spec/architecture.md`](./docs/spec/architecture.md)
 - 按键映射与灯效规范：[`docs/spec/keymap-and-lighting.md`](./docs/spec/keymap-and-lighting.md)

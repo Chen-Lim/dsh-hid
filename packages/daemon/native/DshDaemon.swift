@@ -1841,10 +1841,48 @@ final class DshJsonRpcSession {
         ])
     }
 
+    /// macOS Carbon/CGEvent virtual keyCodes for F1..F12
+    static let macFKeyCodesToSlot: [Int: Int] = [
+        122: 1, // F1
+        120: 2, // F2
+        99:  3, // F3
+        118: 4, // F4
+        96:  5, // F5
+        97:  6, // F6
+        98:  7, // F7
+        100: 8, // F8
+        101: 9, // F9
+        109: 10, // F10
+        103: 11, // F11
+        111: 12  // F12
+    ]
+
     func buildAbortRequest(slotIndex: Int? = nil) throws -> String {
         return try encodeRequest(method: "peripheral/abort", params: [
             "slotIndex": slotIndex ?? focusedSlot
         ])
+    }
+
+    /// Maps a physical macOS virtual keyCode to a JSON-RPC 2.0 request according to the focused slot state.
+    func handlePhysicalKeyCode(_ keyCode: Int) throws -> String? {
+        // 1. F1..F12 always switches focus to the corresponding slot (1..12)
+        if let targetSlot = Self.macFKeyCodesToSlot[keyCode] {
+            return try buildSwitchFocusRequest(slotIndex: targetSlot)
+        }
+        // 2. When the focused slot is in NEEDS_INPUT, decision keys resolve the approval/question
+        if let current = slotsByIndex[focusedSlot], current.status == .needsInput {
+            switch keyCode {
+            case 36, 16, 18: // Return (36), Y (16), 1 (18) -> ACCEPT
+                return try buildSelectOptionRequest(action: "ACCEPT", optionIndex: 0)
+            case 53, 45, 19: // Escape (53), N (45), 2 (19) -> REJECT
+                return try buildSelectOptionRequest(action: "REJECT", optionIndex: 1)
+            case 20: // 3 (20) -> ALWAYS_ALLOW
+                return try buildSelectOptionRequest(action: "ALWAYS_ALLOW", optionIndex: 2)
+            default:
+                break
+            }
+        }
+        return nil
     }
 
     private func encodeRequest(method: String, params: [String: Any]) throws -> String {
@@ -2165,6 +2203,14 @@ final class JSONServer {
             }
             daemon.sendRpcRequest(jsonString)
             return ["sent": true, "jsonrpc": jsonString]
+        case "dshKey":
+            guard let daemon = wsDaemon else { throw failure("NO_WS_DAEMON", "WebSocket daemon is not enabled.") }
+            guard let keyCode = command["keyCode"] as? Int else { throw failure("INVALID_KEYCODE", "dshKey requires an integer keyCode.") }
+            if let jsonString = try daemon.rpcSession.handlePhysicalKeyCode(keyCode) {
+                daemon.sendRpcRequest(jsonString)
+                return ["handled": true, "keyCode": keyCode, "jsonrpc": jsonString]
+            }
+            return ["handled": false, "keyCode": keyCode]
         case "quit": wsDaemon?.stop(); stopping = true; return ["quitting": true]
         default: throw failure("UNKNOWN_OPERATION", "Unknown operation: \(op)")
         }
@@ -2813,6 +2859,13 @@ func testDshJsonRpcAndRenderingLifecycle(_ check: (Bool, String) throws -> Void)
     try check(optReq.contains("\"method\":\"peripheral/selectOption\"") && optReq.contains("\"optionIndex\":1") && optReq.contains("\"action\":\"REJECT\""), "selectOption JSON-RPC resolves optionIndex from question")
     let abortReq = try session.buildAbortRequest()
     try check(abortReq.contains("\"method\":\"peripheral/abort\"") && abortReq.contains("\"slotIndex\":2"), "abort JSON-RPC request")
+    // Physical macOS keyCode mapping: F4 (118) -> switchFocus(4), Return (36) -> selectOption(ACCEPT), Escape (53) -> selectOption(REJECT)
+    let f4Rpc = try session.handlePhysicalKeyCode(118)
+    try check(f4Rpc?.contains("\"method\":\"peripheral/switchFocus\"") == true && f4Rpc?.contains("\"slotIndex\":4") == true, "F4 keyCode 118 maps to switchFocus(4)")
+    let enterRpc = try session.handlePhysicalKeyCode(36)
+    try check(enterRpc?.contains("\"method\":\"peripheral/selectOption\"") == true && enterRpc?.contains("\"action\":\"ACCEPT\"") == true, "Return keyCode 36 maps to selectOption(ACCEPT) in NEEDS_INPUT")
+    let escRpc = try session.handlePhysicalKeyCode(53)
+    try check(escRpc?.contains("\"method\":\"peripheral/selectOption\"") == true && escRpc?.contains("\"action\":\"REJECT\"") == true, "Escape keyCode 53 maps to selectOption(REJECT) in NEEDS_INPUT")
 
     // 4. End-to-end sync against virtual S4 Board
     let dir = FileManager.default.temporaryDirectory.appendingPathComponent("dsh-s4-test-\(UUID().uuidString)")

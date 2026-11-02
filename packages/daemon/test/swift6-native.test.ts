@@ -5,6 +5,12 @@ import { createInterface } from 'node:readline';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { WebSocketServer, WebSocket } from 'ws';
+import { Context } from 'cordis';
+import {
+  PeripheralServerService,
+  type ApprovalOutcome,
+  type ApprovalRequestEvent,
+} from 'dsh-plugin-peripheral-server';
 import {
   AgentPeripheralStatus,
   NOTIFICATION_SNAPSHOT,
@@ -27,13 +33,11 @@ const swiftBinaryPath = resolve(daemonRoot, 'bin/dsh-daemon');
 
 function ensureSwiftBinaryCompiled(): void {
   mkdirSync(resolve(daemonRoot, 'bin'), { recursive: true });
-  if (!existsSync(swiftBinaryPath)) {
-    execFileSync(
-      'swiftc',
-      ['-swift-version', '6', '-strict-concurrency=complete', '-O', swiftSourcePath, '-o', swiftBinaryPath],
-      { stdio: 'inherit' },
-    );
-  }
+  execFileSync(
+    'swiftc',
+    ['-swift-version', '6', '-strict-concurrency=complete', '-O', swiftSourcePath, '-o', swiftBinaryPath],
+    { stdio: 'inherit' },
+  );
 }
 
 class NativeProcessHarness {
@@ -311,6 +315,85 @@ describe('Swift 6 Native S4 Daemon (DshDaemon.swift) Cross-Verification', () => 
       await harness.waitForMessage((m) => m.event === 'dshServerShuttingDown');
     } finally {
       await harness.close();
+    }
+  });
+
+  it('completes full-stack DSH Cordis + ApprovalArbiter + Swift 6 Native Daemon E2E loop', async () => {
+    const ctx = new Context();
+    const service = new PeripheralServerService(ctx, {
+      host: '127.0.0.1',
+      port: 0,
+      path: '/peripheral/v1',
+      autoBindSlots: true,
+    });
+    await service.start();
+    const port = service.wsServer.getPort();
+    const liveWsUrl = `ws://127.0.0.1:${port}/peripheral/v1`;
+
+    const harness = new NativeProcessHarness(['--ws', liveWsUrl]);
+    try {
+      // 1. Wait for Swift 6 daemon to connect and sync initial snapshot
+      await harness.waitForMessage((m) => m.event === 'dshStateSynced' && m.focusedSlot === 1);
+
+      // 2. Emit real DSH session & turn events
+      ctx.emit('api-session/added', { id: 'dsh-live-1', running: true });
+      await harness.waitForMessage(
+        (m) => m.event === 'dshStateSynced' && m.activeSlotCount === 1,
+      );
+
+      // 3. Register downstream Web UI approval listener to verify signal withdrawal when hardware wins
+      let webUiSignalAborted = false;
+      ctx.on('approval/request', async (req: ApprovalRequestEvent) => {
+        req.signal?.addEventListener('abort', () => {
+          webUiSignalAborted = true;
+        });
+        return await new Promise<ApprovalOutcome>((resolvePromise) => {
+          req.signal?.addEventListener('abort', () => resolvePromise('cancelled'), { once: true });
+        });
+      });
+
+      // 4. Trigger `approval/request` waterfall in DSH
+      const approvalPromise = ctx.waterfall(
+        'approval/request',
+        {
+          agent: { id: 'agent-live-1', session: { id: 'dsh-live-1' } },
+          toolName: 'run_command',
+          reason: 'Allow git push?',
+        },
+        async (): Promise<ApprovalOutcome> => 'unavailable',
+      );
+
+      // Wait for Swift 6 daemon to receive NEEDS_INPUT state update
+      await new Promise((r) => setTimeout(r, 60));
+      harness.sendJsonl({ id: 201, op: 'dshState' });
+      const approvalStateRes = await harness.waitForMessage((m) => m.id === 201);
+      const approvalColors = (approvalStateRes.result as { colors: string[] }).colors;
+      expect(approvalColors[1]).toBe('#ff6d00'); // F1 is NEEDS_INPUT amber
+      expect(approvalColors[57]).toBe('#00ff4c'); // Enter is highlighted green for ACCEPT
+      expect(approvalColors[0]).toBe('#ff0033'); // Esc is highlighted red for REJECT
+
+      // 5. Simulate physical Return/Enter key (macOS virtual keyCode 36) in Swift 6 daemon
+      harness.sendJsonl({ id: 202, op: 'dshKey', keyCode: 36 });
+      const keyRes = await harness.waitForMessage((m) => m.id === 202);
+      expect(keyRes.ok).toBe(true);
+      expect((keyRes.result as { handled: boolean }).handled).toBe(true);
+
+      // 6. Verify `approval/request` waterfall settles to `allowed-once` and withdraws Web UI card
+      const outcome = await approvalPromise;
+      expect(outcome).toBe('allowed-once');
+      expect(webUiSignalAborted).toBe(true);
+
+      // 7. Emit DSH turn/end -> COMPLETED and verify Swift 6 daemon updates F1 to #00ff4c
+      ctx.emit('session/event', { id: 'dsh-live-1' }, { type: 'turn/end' });
+      await new Promise((r) => setTimeout(r, 60));
+      harness.sendJsonl({ id: 203, op: 'dshState' });
+      const completedStateRes = await harness.waitForMessage((m) => m.id === 203);
+      const completedColors = (completedStateRes.result as { colors: string[] }).colors;
+      expect(completedColors[1]).toBe('#00ff4c'); // F1 is COMPLETED green
+      expect(completedColors[57]).toBe('#000000'); // Enter decision key is extinguished
+    } finally {
+      await harness.close();
+      await service.stop();
     }
   });
 });
