@@ -11,6 +11,12 @@ import {
 } from '@dsh-hid/protocol';
 import { SessionRouter } from './router.js';
 import { PeripheralWsServer, type PeripheralRpcHandler } from './ws-server.js';
+import {
+  ApprovalArbiter,
+  type ApprovalOutcome,
+  type ApprovalRequestEvent,
+  type DshAgentRef,
+} from './arbiter.js';
 
 export interface PeripheralServerConfig {
   host?: string;
@@ -18,6 +24,32 @@ export interface PeripheralServerConfig {
   path?: string;
   totalSlots?: number;
   autoBindSlots?: boolean;
+  /**
+   * When true, `ApprovalArbiter` intercepts `approval/request` even if no WebSocket
+   * client is currently connected (useful for in-process unit testing).
+   */
+  forceArbitration?: boolean;
+}
+
+export interface DshSessionSummary {
+  readonly id?: string;
+  readonly sessionId?: string;
+  readonly running?: boolean;
+}
+
+export interface DshSessionRef {
+  readonly id: string;
+}
+
+export interface DshSessionEventPayload {
+  readonly type: string;
+  readonly data?: Record<string, unknown>;
+}
+
+export interface DshToolExecutionPayload {
+  readonly name?: string;
+  readonly toolName?: string;
+  readonly agent?: DshAgentRef;
 }
 
 const BRAINPOWER_LEVELS: BrainpowerLevel[] = ['low', 'medium', 'high', 'max'];
@@ -34,28 +66,39 @@ function adjustBrainpower(
   const currentIndex = BRAINPOWER_LEVELS.indexOf(current);
   if (direction === 'stepUp') {
     const nextIndex = Math.min(BRAINPOWER_LEVELS.length - 1, currentIndex + 1);
-    return BRAINPOWER_LEVELS[nextIndex];
+    return BRAINPOWER_LEVELS[nextIndex]!;
   } else if (direction === 'stepDown') {
     const prevIndex = Math.max(0, currentIndex - 1);
-    return BRAINPOWER_LEVELS[prevIndex];
+    return BRAINPOWER_LEVELS[prevIndex]!;
   }
 
   return current;
 }
 
+function extractSessionId(target: string | DshAgentRef | DshSessionRef | undefined | null): string | null {
+  if (!target) return null;
+  if (typeof target === 'string') return target;
+  if ('session' in target && target.session?.id) return target.session.id;
+  if ('id' in target && typeof target.id === 'string') return target.id;
+  return null;
+}
+
 export class PeripheralServerService extends Service {
   public static readonly inject = {
-    optional: ['agentLoop', 'session', 'interaction'],
+    optional: ['agentLoop', 'session', 'sessions', 'interaction', 'approval', 'sessionController'],
   };
 
   public readonly router: SessionRouter;
   public readonly wsServer: PeripheralWsServer;
+  public readonly arbiter: ApprovalArbiter;
   private readonly autoBindSlots: boolean;
+  private readonly forceArbitration: boolean;
 
   constructor(ctx: Context, config?: PeripheralServerConfig) {
     super(ctx, 'peripheralServer');
 
     this.autoBindSlots = config?.autoBindSlots ?? true;
+    this.forceArbitration = config?.forceArbitration ?? false;
     this.router = new SessionRouter({ totalSlots: config?.totalSlots });
 
     const rpcHandler: PeripheralRpcHandler = {
@@ -92,7 +135,10 @@ export class PeripheralServerService extends Service {
         if (!slot) {
           throw new Error(`Slot ${slotIndex} not found`);
         }
-        // Emit DSH interaction resolution event
+        // 1. Settle pending `approval/request` waterfall in ApprovalArbiter if active
+        const settledByArbiter = this.arbiter.resolveBySlotOption(slotIndex, action);
+
+        // 2. Emit DSH interaction resolution event
         this.ctx.emit(
           'peripheral/option-selected',
           slotIndex,
@@ -100,11 +146,14 @@ export class PeripheralServerService extends Service {
           action,
           slot.sessionId ?? null
         );
-        // Clear pending question and resume running
-        this.router.updateSlot(slotIndex, {
-          status: AgentPeripheralStatus.RUNNING,
-          question: undefined,
-        });
+
+        // 3. Clear pending question and resume running if not already updated by arbiter cleanup
+        if (!settledByArbiter) {
+          this.router.updateSlot(slotIndex, {
+            status: AgentPeripheralStatus.RUNNING,
+            question: undefined,
+          });
+        }
         return { success: true, slotIndex };
       },
       onAbort: async (slotIndex: number) => {
@@ -112,9 +161,13 @@ export class PeripheralServerService extends Service {
         if (!slot) {
           throw new Error(`Slot ${slotIndex} not found`);
         }
+        // Cancel any pending approval in the arbiter first
+        this.arbiter.cancelBySlot(slotIndex);
+
         this.ctx.emit('peripheral/abort-requested', slotIndex, slot.sessionId ?? null);
         this.router.updateSlot(slotIndex, {
           status: AgentPeripheralStatus.ERROR,
+          question: undefined,
         });
         return { success: true, slotIndex };
       },
@@ -125,6 +178,11 @@ export class PeripheralServerService extends Service {
       port: config?.port ?? DEFAULT_PORT,
       path: config?.path ?? DEFAULT_PATH,
       handler: rpcHandler,
+    });
+
+    this.arbiter = new ApprovalArbiter(this.ctx, this.router, {
+      isPeripheralAvailable: () => this.forceArbitration || this.wsServer.getClientCount() > 0,
+      autoBindSlots: this.autoBindSlots,
     });
 
     // Pipe router changes to WebSocket broadcasts
@@ -139,6 +197,7 @@ export class PeripheralServerService extends Service {
     });
 
     this.registerDshEvents();
+    this.arbiter.attach();
 
     // Auto-clean on context dispose
     this.ctx.on('dispose', async () => {
@@ -146,29 +205,210 @@ export class PeripheralServerService extends Service {
     });
   }
 
+  private ensureAndUpdateSession(
+    sessionId: string,
+    patch: Partial<Omit<SlotInfo, 'slotIndex' | 'sessionId'>>
+  ): void {
+    let slot = this.router.getSlotBySessionId(sessionId);
+    if (!slot && this.autoBindSlots) {
+      slot = this.router.allocateSlot(sessionId, patch.status ?? AgentPeripheralStatus.IDLE);
+    }
+    if (slot) {
+      this.router.updateSlot(slot.slotIndex, patch);
+    }
+  }
+
   /**
-   * Subscribes to DSH agent lifecycle and interaction events.
+   * Subscribes to real DeepSeek Harness (DSH) agent, session, tool, and approval lifecycle events,
+   * while preserving backward-compatible event signatures for standalone tests.
    */
   private registerDshEvents(): void {
-    // 1. Agent instance created
-    this.ctx.on('agent/created', (sessionId: string) => {
-      if (this.autoBindSlots) {
+    // --- A. Real DSH `api-session/*` events (`@deepseek-ai/dsh-api-session-controller`) ---
+    this.ctx.on('api-session/added', (summary: DshSessionSummary) => {
+      const sessionId = summary.sessionId ?? summary.id;
+      if (!sessionId || !this.autoBindSlots) return;
+      const initialStatus = summary.running
+        ? AgentPeripheralStatus.RUNNING
+        : AgentPeripheralStatus.IDLE;
+      const existing = this.router.getSlotBySessionId(sessionId);
+      if (!existing) {
+        this.router.allocateSlot(sessionId, initialStatus);
+      } else if (summary.running !== undefined) {
+        this.router.updateSlot(existing.slotIndex, { status: initialStatus });
+      }
+    });
+
+    this.ctx.on('api-session/removed', (sessionId: string) => {
+      this.router.releaseSession(sessionId);
+    });
+
+    this.ctx.on('api-session/status', (sessionId: string, running: boolean) => {
+      const current = this.router.getSlotBySessionId(sessionId);
+      // Do not overwrite NEEDS_INPUT while waiting for approval
+      if (current?.status === AgentPeripheralStatus.NEEDS_INPUT && running) {
+        return;
+      }
+      this.ensureAndUpdateSession(sessionId, {
+        status: running ? AgentPeripheralStatus.RUNNING : AgentPeripheralStatus.IDLE,
+        ...(running ? {} : { activeTool: undefined, question: undefined }),
+      });
+    });
+
+    this.ctx.on('api-session/error', (sessionId: string, _message: string) => {
+      this.ensureAndUpdateSession(sessionId, {
+        status: AgentPeripheralStatus.ERROR,
+        activeTool: undefined,
+      });
+    });
+
+    // --- B. Real DSH `session/*` events (`@deepseek-ai/dsh-session`) ---
+    this.ctx.on('session/created', (session: DshSessionRef | string) => {
+      const sessionId = extractSessionId(session);
+      if (sessionId && this.autoBindSlots) {
         this.router.allocateSlot(sessionId, AgentPeripheralStatus.IDLE);
       }
     });
 
-    // 2. Agent instance disposed / closed
-    this.ctx.on('agent/disposed', (sessionId: string) => {
-      this.router.releaseSession(sessionId);
+    this.ctx.on('session/disposed', (session: DshSessionRef | string) => {
+      const sessionId = extractSessionId(session);
+      if (sessionId) {
+        this.router.releaseSession(sessionId);
+      }
     });
 
-    // 3. Agent status transitions (e.g. idle, running, error, completed)
-    this.ctx.on('agent/status', (sessionId: string, status: string | AgentPeripheralStatus) => {
-      const peripheralStatus = this.mapAgentStatus(status);
-      this.router.updateSlotBySessionId(sessionId, { status: peripheralStatus });
+    this.ctx.on('session/event', (session: DshSessionRef | string, event: DshSessionEventPayload) => {
+      const sessionId = extractSessionId(session);
+      if (!sessionId || !event?.type) return;
+
+      switch (event.type) {
+        case 'turn/start':
+          this.ensureAndUpdateSession(sessionId, {
+            status: AgentPeripheralStatus.RUNNING,
+          });
+          break;
+        case 'turn/end': {
+          const reason = typeof event.data?.reason === 'string' ? event.data.reason : undefined;
+          const nextStatus =
+            reason === 'error' || reason === 'failed'
+              ? AgentPeripheralStatus.ERROR
+              : AgentPeripheralStatus.COMPLETED;
+          this.ensureAndUpdateSession(sessionId, {
+            status: nextStatus,
+            activeTool: undefined,
+            question: undefined,
+          });
+          break;
+        }
+        case 'tool/call': {
+          const toolName =
+            (typeof event.data?.toolName === 'string' ? event.data.toolName : undefined) ??
+            (typeof event.data?.name === 'string' ? event.data.name : undefined);
+          this.ensureAndUpdateSession(sessionId, {
+            status: AgentPeripheralStatus.RUNNING,
+            ...(toolName ? { activeTool: toolName } : {}),
+          });
+          break;
+        }
+        case 'tool/result':
+          this.ensureAndUpdateSession(sessionId, {
+            activeTool: undefined,
+          });
+          break;
+        default:
+          break;
+      }
     });
 
-    // 4. Human-In-The-Loop interactive prompt
+    // --- C. Real DSH `agent/*` events (`@deepseek-ai/dsh-agent` + legacy string overload) ---
+    this.ctx.on(
+      'agent/created',
+      (payloadOrId: string | { agent: DshAgentRef; source?: string; signal?: AbortSignal }) => {
+        const sessionId =
+          typeof payloadOrId === 'string'
+            ? payloadOrId
+            : extractSessionId(payloadOrId?.agent);
+        if (sessionId && this.autoBindSlots) {
+          this.router.allocateSlot(sessionId, AgentPeripheralStatus.IDLE);
+        }
+      }
+    );
+
+    this.ctx.on(
+      'agent/disposed',
+      (payloadOrId: string | { agent: DshAgentRef }) => {
+        const sessionId =
+          typeof payloadOrId === 'string'
+            ? payloadOrId
+            : extractSessionId(payloadOrId?.agent);
+        if (sessionId) {
+          this.router.releaseSession(sessionId);
+        }
+      }
+    );
+
+    this.ctx.on(
+      'agent/status',
+      (
+        payloadOrId: string | { agent: DshAgentRef; status: string | AgentPeripheralStatus },
+        legacyStatus?: string | AgentPeripheralStatus
+      ) => {
+        const sessionId =
+          typeof payloadOrId === 'string'
+            ? payloadOrId
+            : extractSessionId(payloadOrId?.agent);
+        const rawStatus =
+          typeof payloadOrId === 'string' ? legacyStatus : payloadOrId?.status;
+        if (!sessionId || !rawStatus) return;
+
+        const peripheralStatus = this.mapAgentStatus(rawStatus);
+        this.router.updateSlotBySessionId(sessionId, { status: peripheralStatus });
+      }
+    );
+
+    this.ctx.on(
+      'agent/error',
+      (
+        payloadOrId: string | { agent: DshAgentRef; turn?: number; step?: number; error: unknown },
+        _legacyError?: unknown
+      ) => {
+        const sessionId =
+          typeof payloadOrId === 'string'
+            ? payloadOrId
+            : extractSessionId(payloadOrId?.agent);
+        if (!sessionId) return;
+        this.ensureAndUpdateSession(sessionId, {
+          status: AgentPeripheralStatus.ERROR,
+          activeTool: undefined,
+        });
+      }
+    );
+
+    // --- D. Real DSH `tools/*` events (`@deepseek-ai/dsh-tools`) ---
+    this.ctx.on(
+      'tools/pre-execute',
+      async (exec: DshToolExecutionPayload, next: () => Promise<unknown>) => {
+        const sessionId = extractSessionId(exec?.agent);
+        const toolName = exec?.name ?? exec?.toolName;
+        if (sessionId && toolName) {
+          this.ensureAndUpdateSession(sessionId, {
+            status: AgentPeripheralStatus.RUNNING,
+            activeTool: toolName,
+          });
+        }
+        return await next();
+      }
+    );
+
+    this.ctx.on('tools/result', (exec: DshToolExecutionPayload) => {
+      const sessionId = extractSessionId(exec?.agent);
+      if (sessionId) {
+        this.router.updateSlotBySessionId(sessionId, {
+          activeTool: undefined,
+        });
+      }
+    });
+
+    // --- E. Human-In-The-Loop interactive prompt & legacy tool helpers ---
     this.ctx.on(
       'interaction/user-questions',
       (sessionId: string, question: { prompt: string; options: string[] }) => {
@@ -179,7 +419,6 @@ export class PeripheralServerService extends Service {
       }
     );
 
-    // 5. Active tool execution tracking
     this.ctx.on('agent/tool-start', (sessionId: string, toolName: string) => {
       this.router.updateSlotBySessionId(sessionId, {
         status: AgentPeripheralStatus.RUNNING,
@@ -249,9 +488,29 @@ declare module 'cordis' {
 
   interface Events {
     'dispose'(): void | Promise<void>;
-    'agent/created'(sessionId: string): void;
-    'agent/disposed'(sessionId: string): void;
-    'agent/status'(sessionId: string, status: string | AgentPeripheralStatus): void;
+    'api-session/added'(summary: DshSessionSummary): void;
+    'api-session/removed'(sessionId: string): void;
+    'api-session/status'(sessionId: string, running: boolean): void;
+    'api-session/error'(sessionId: string, message: string): void;
+    'session/created'(session: DshSessionRef | string): void;
+    'session/disposed'(session: DshSessionRef | string): void;
+    'session/event'(session: DshSessionRef | string, event: DshSessionEventPayload): void;
+    'agent/created'(payloadOrId: string | { agent: DshAgentRef; source?: string; signal?: AbortSignal }): void | Promise<void>;
+    'agent/disposed'(payloadOrId: string | { agent: DshAgentRef }): void;
+    'agent/status'(
+      payloadOrId: string | { agent: DshAgentRef; status: string | AgentPeripheralStatus },
+      legacyStatus?: string | AgentPeripheralStatus
+    ): void;
+    'agent/error'(
+      payloadOrId: string | { agent: DshAgentRef; turn?: number; step?: number; error: unknown },
+      legacyError?: unknown
+    ): void;
+    'tools/pre-execute'(exec: DshToolExecutionPayload, next: () => Promise<unknown>): Promise<unknown>;
+    'tools/result'(exec: DshToolExecutionPayload, result?: unknown): void;
+    'approval/request'(
+      req: ApprovalRequestEvent,
+      next: () => Promise<ApprovalOutcome>
+    ): Promise<ApprovalOutcome>;
     'interaction/user-questions'(sessionId: string, question: { prompt: string; options: string[] }): void;
     'agent/tool-start'(sessionId: string, toolName: string): void;
     'agent/tool-end'(sessionId: string): void;
