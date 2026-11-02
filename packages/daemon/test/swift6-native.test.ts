@@ -33,11 +33,13 @@ const swiftBinaryPath = resolve(daemonRoot, 'bin/dsh-daemon');
 
 function ensureSwiftBinaryCompiled(): void {
   mkdirSync(resolve(daemonRoot, 'bin'), { recursive: true });
-  execFileSync(
-    'swiftc',
-    ['-swift-version', '6', '-strict-concurrency=complete', '-O', swiftSourcePath, '-o', swiftBinaryPath],
-    { stdio: 'inherit' },
-  );
+  if (!existsSync(swiftBinaryPath)) {
+    execFileSync(
+      'swiftc',
+      ['-swift-version', '6', '-strict-concurrency=complete', '-O', swiftSourcePath, '-o', swiftBinaryPath],
+      { stdio: 'inherit' },
+    );
+  }
 }
 
 class NativeProcessHarness {
@@ -116,7 +118,7 @@ describe('Swift 6 Native S4 Daemon (DshDaemon.swift) Cross-Verification', () => 
 
   beforeAll(() => {
     ensureSwiftBinaryCompiled();
-  });
+  }, 30000);
 
   beforeEach(async () => {
     wss = new WebSocketServer({ port: 0 });
