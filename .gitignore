@@ -29,10 +29,11 @@ node_modules/
 jspm_packages/
 web_modules/
 
-# TypeScript build output & cache
+# TypeScript & Native build output & cache
 dist/
 lib/
 out/
+packages/daemon/bin/
 *.tsbuildinfo
 .npm
 
