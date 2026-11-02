@@ -79,3 +79,6 @@ export class PeripheralServerService extends Service {
 - **设备连接状态指示灯**：展示当前连接的 Daemon 数量与硬件型号（VIA / Nuphy）。
 - **槽位可视化映射表**：直观查看 F1~F12 绑定的 Session 名称、Token 消耗与当前状态。
 - **物理按键行为自定义**：支持用户在 UI 上微调 F 键的长按/短按行为与旋钮灵敏度。
+
+> 具体的槽位（`sidebar.panellist` / `main`）、客户端半打包、Host 状态通道与审批边界，见
+> [`docs/spec/sidebar-resident-ui.md`](./sidebar-resident-ui.md)。
