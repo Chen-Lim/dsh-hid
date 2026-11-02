@@ -469,6 +469,10 @@ export class PeripheralServerService extends Service {
     await this.wsServer.start();
   }
 
+  protected async [Service.init](): Promise<void> {
+    await this.start();
+  }
+
   /**
    * Stops the peripheral server and terminates active client connections.
    */
@@ -478,7 +482,11 @@ export class PeripheralServerService extends Service {
 }
 
 export function apply(ctx: Context, config?: PeripheralServerConfig): void {
-  ctx.plugin(PeripheralServerService, config);
+  const service = ctx.plugin(PeripheralServerService, config);
+  // Ensure the WebSocket server is started upon mounting
+  if (ctx.peripheralServer) {
+    void ctx.peripheralServer.start();
+  }
 }
 
 declare module 'cordis' {

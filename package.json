@@ -11,6 +11,7 @@
     "test:native": "pnpm --filter @dsh-hid/daemon run test:native",
     "typecheck": "tsc -b",
     "clean": "pnpm --recursive run clean",
+    "install:dsh": "./scripts/install-to-dsh.sh",
     "daemon:mock": "node packages/daemon/dist/cli.js --adapter=mock",
     "daemon:nuphy": "node packages/daemon/dist/cli.js --adapter=nuphy",
     "daemon:native": "packages/daemon/bin/dsh-daemon --daemon",

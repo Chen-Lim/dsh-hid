@@ -1,0 +1,6 @@
+- insert:
+    - id: peripheral-server
+      name: dsh-plugin-peripheral-server
+      config:
+        port: 45678
+        autoBindSlots: true
