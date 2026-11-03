@@ -1856,20 +1856,20 @@ final class DshJsonRpcSession {
         ])
     }
 
-    /// macOS Carbon/CGEvent virtual keyCodes for F1..F12
+    /// macOS Carbon/CGEvent virtual keyCodes for F1..F12 and their factory Mac media key counterparts
     static let macFKeyCodesToSlot: [Int: Int] = [
-        122: 1, // F1
-        120: 2, // F2
-        99:  3, // F3
-        118: 4, // F4
-        96:  5, // F5
-        97:  6, // F6
-        98:  7, // F7
-        100: 8, // F8
-        101: 9, // F9
-        109: 10, // F10
-        103: 11, // F11
-        111: 12  // F12
+        122: 1, 105: 1, // F1 / Brightness Down
+        120: 2, 106: 2, // F2 / Brightness Up
+        99:  3, 160: 3, // F3 / Mission Control
+        118: 4, 131: 4, 177: 4, // F4 / Spotlight / Launchpad
+        96:  5,         // F5 / Dictation
+        97:  6,         // F6 / Focus
+        98:  7, 172: 7, // F7 / Previous Track
+        100: 8, 174: 8, // F8 / Play-Pause
+        101: 9, 171: 9, // F9 / Next Track
+        109: 10, 168: 10, // F10 / Mute
+        103: 11, 170: 11, // F11 / Volume Down
+        111: 12, 169: 12  // F12 / Volume Up
     ]
 
     func buildAbortRequest(slotIndex: Int? = nil) throws -> String {
@@ -1951,6 +1951,7 @@ final class DshWebSocketDaemon: @unchecked Sendable {
     private var reconnectWorkItem: DispatchWorkItem?
     private var keyTap: CFMachPort?
     private var keyTapSource: CFRunLoopSource?
+    private var permissionRetryTimer: DispatchSourceTimer?
     private var lastAdaptedSlots = [Int]()
     private var currentDelayMs: Double = 500.0
     private let initialDelayMs: Double = 500.0
@@ -1991,6 +1992,7 @@ final class DshWebSocketDaemon: @unchecked Sendable {
         emit(["event": "dshDaemonStarted", "url": url.absoluteString])
         if !hardwareMockMode {
             startGlobalKeyTapIfPermitted()
+            startPermissionCheckLoop()
         }
         connectWebSocket()
         startFrameLoop()
@@ -1999,6 +2001,8 @@ final class DshWebSocketDaemon: @unchecked Sendable {
     func stop() {
         running = false
         stopGlobalKeyTap()
+        permissionRetryTimer?.cancel()
+        permissionRetryTimer = nil
         reconnectWorkItem?.cancel()
         reconnectWorkItem = nil
         frameTimer?.cancel()
@@ -2201,8 +2205,28 @@ final class DshWebSocketDaemon: @unchecked Sendable {
         }
     }
 
+    private func startPermissionCheckLoop() {
+        guard permissionRetryTimer == nil else { return }
+        let timer = DispatchSource.makeTimerSource(queue: .main)
+        timer.schedule(deadline: .now() + 2.0, repeating: 2.0)
+        timer.setEventHandler { [weak self] in
+            guard let self = self, self.running, !self.hardwareMockMode else { return }
+            if self.keyTap == nil {
+                self.startGlobalKeyTapIfPermitted()
+            }
+        }
+        timer.resume()
+        self.permissionRetryTimer = timer
+    }
+
     private func startGlobalKeyTapIfPermitted() {
-        guard keyTap == nil, CGPreflightListenEventAccess() else { return }
+        guard keyTap == nil else { return }
+        if !CGPreflightListenEventAccess() {
+            _ = CGRequestListenEventAccess()
+        }
+        let promptOptions: NSDictionary = ["AXTrustedCheckOptionPrompt": true]
+        _ = AXIsProcessTrustedWithOptions(promptOptions as CFDictionary)
+
         let context = Unmanaged.passUnretained(self).toOpaque()
         let mask = CGEventMask(1) << CGEventType.keyDown.rawValue
         guard let tap = CGEvent.tapCreate(
@@ -2217,7 +2241,9 @@ final class DshWebSocketDaemon: @unchecked Sendable {
                 return Unmanaged.passUnretained(event)
             },
             userInfo: context
-        ) else { return }
+        ) else {
+            return
+        }
         guard let source = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, tap, 0) else {
             CFMachPortInvalidate(tap)
             return
@@ -2226,6 +2252,7 @@ final class DshWebSocketDaemon: @unchecked Sendable {
         keyTapSource = source
         CFRunLoopAddSource(CFRunLoopGetMain(), source, .commonModes)
         CGEvent.tapEnable(tap: tap, enable: true)
+        diagnostic("Global key tap installed successfully.")
     }
 
     private func stopGlobalKeyTap() {
