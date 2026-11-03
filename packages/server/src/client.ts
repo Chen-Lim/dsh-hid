@@ -142,6 +142,7 @@ if (win?.__ModuleLoader__) {
             listeners.add(listener);
             return () => listeners.delete(listener);
           },
+          emit,
           patch(next: Partial<UiState>): void {
             state = { ...state, ...next };
             emit();
@@ -185,26 +186,60 @@ if (win?.__ModuleLoader__) {
       }
 
       return {
-        inject: ['slots', 'uiWorkspace'],
+        inject: ['slots', 'uiWorkspace', 'locale'],
         apply(ctx: any) {
           const store = createStore();
           const disposers: Array<() => void> = [];
           const lifecycle = { disposed: false, navigating: false };
           let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
           let ws: WebSocket | null = null;
-          let t: (key: string) => string = (key) =>
-            (EN_DICT as Record<string, string>)[key] ?? key;
+          let t: (key: string) => string = (key) => {
+            const isZh =
+              typeof navigator !== 'undefined' &&
+              navigator.language?.toLowerCase().startsWith('zh');
+            const dict = isZh ? ZH_DICT : EN_DICT;
+            return (
+              (dict as Record<string, string>)[key] ??
+              (EN_DICT as Record<string, string>)[key] ??
+              key
+            );
+          };
 
           const locale = typeof ctx.get === 'function' ? ctx.get('locale') : ctx?.locale;
           if (locale && typeof locale.register === 'function') {
             try {
               disposers.push(locale.register('peripheral', 'en', EN_DICT));
-              disposers.push(locale.register('peripheral', 'zh-CN', ZH_DICT));
               disposers.push(locale.register('peripheral', 'zh', ZH_DICT));
-              t = locale.bind('peripheral');
+              disposers.push(locale.register('peripheral', 'zh-CN', ZH_DICT));
+              if (typeof locale.bind === 'function') {
+                t = locale.bind('peripheral');
+              }
             } catch {
-              // Locale registration is cosmetic; keep the English fallbacks on failure.
+              // Locale registration is cosmetic; keep the fallbacks on failure.
             }
+
+            // Sync with host locale switch in real time
+            if (typeof locale.subscribe === 'function') {
+              try {
+                const unsubscribe = locale.subscribe(() => {
+                  store.emit();
+                });
+                if (typeof unsubscribe === 'function') {
+                  disposers.push(unsubscribe);
+                }
+              } catch {}
+            }
+          }
+
+          if (typeof ctx.on === 'function') {
+            try {
+              const unlisten = ctx.on('locale/change', () => {
+                store.emit();
+              });
+              if (typeof unlisten === 'function') {
+                disposers.push(unlisten);
+              }
+            } catch {}
           }
 
           function navigateToSession(sessionId: string | undefined): void {
@@ -775,6 +810,7 @@ if (win?.__ModuleLoader__) {
                       name: 'sidebar.panellist',
                       id: 'peripheral',
                       order: 20,
+                      locale: 'peripheral',
                       label: () => t('title'),
                     },
                     PeripheralIcon
@@ -783,7 +819,14 @@ if (win?.__ModuleLoader__) {
               );
               disposers.push(
                 slots.inject('main', () =>
-                  slots.register({ name: 'main', key: 'peripheral' }, PeripheralPanel)
+                  slots.register(
+                    {
+                      name: 'main',
+                      key: 'peripheral',
+                      locale: 'peripheral',
+                    },
+                    PeripheralPanel
+                  )
                 )
               );
             } catch (err) {

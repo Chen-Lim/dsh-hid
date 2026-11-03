@@ -1,0 +1,28 @@
+{
+  "meta": {
+    "title": "Peripheral",
+    "description": "Physical slot status reported by the peripheral bridge."
+  },
+  "meta.title": "Peripheral",
+  "meta.description": "Physical slot status reported by the peripheral bridge.",
+  "title": "Peripheral",
+  "subtitle": "Physical slot status reported by the peripheral bridge.",
+  "connected": "Bridge connected",
+  "disconnected": "Bridge offline",
+  "slot": "Slot",
+  "session": "Session",
+  "status": "Status",
+  "tool": "Tool",
+  "error": "Connection error. Retrying…",
+  "status.INACTIVE": "Inactive",
+  "status.IDLE": "Idle",
+  "status.RUNNING": "Running",
+  "status.NEEDS_INPUT": "Needs input",
+  "status.COMPLETED": "Completed",
+  "status.ERROR": "Error",
+  "transport.usb": "USB",
+  "transport.2.4g": "2.4G Wireless",
+  "transport.bluetooth": "Bluetooth (Keys Only)",
+  "transport.disconnected": "No Hardware",
+  "bluetoothNotice": "Bluetooth mode active: per-key RGB is unavailable over Bluetooth. Physical shortcut keys (F1–F12 / Y / N / Enter / Esc) and audio alerts remain active. Connect via USB or 2.4G Dongle for full RGB."
+}

@@ -5,5 +5,6 @@ export * from './ws-server.js';
 export * from './arbiter.js';
 export * from './daemon-manager.js';
 export * from './service.js';
+export * from './i18n/index.js';
 
 export { apply as default } from './service.js';
