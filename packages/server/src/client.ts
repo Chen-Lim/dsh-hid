@@ -159,7 +159,7 @@ if (win?.__ModuleLoader__) {
       }
 
       return {
-        inject: ['uiWorkspace'],
+        inject: ['slots', 'uiWorkspace'],
         apply(ctx: any) {
           const store = createStore();
           const disposers: Array<() => void> = [];
@@ -169,7 +169,7 @@ if (win?.__ModuleLoader__) {
           let t: (key: string) => string = (key) =>
             (EN_DICT as Record<string, string>)[key] ?? key;
 
-          const locale = typeof ctx.get === 'function' ? ctx.get('locale') : ctx.locale;
+          const locale = typeof ctx.get === 'function' ? ctx.get('locale') : ctx?.locale;
           if (locale && typeof locale.register === 'function') {
             try {
               disposers.push(locale.register('peripheral', 'en', EN_DICT));
@@ -185,7 +185,10 @@ if (win?.__ModuleLoader__) {
             if (!sessionId) return;
             lifecycle.navigating = true;
             try {
-              ctx.uiWorkspace?.openSession?.(sessionId);
+              const uiWorkspace = typeof ctx.get === 'function' ? ctx.get('uiWorkspace') : ctx?.uiWorkspace;
+              uiWorkspace?.openSession?.(sessionId);
+            } catch {
+              // ignore
             } finally {
               setTimeout(() => {
                 lifecycle.navigating = false;
@@ -262,9 +265,10 @@ if (win?.__ModuleLoader__) {
           }
 
           // Keep UI navigation and the bridge focus in sync for clicks inside the app.
-          if (ctx.uiWorkspace && typeof ctx.uiWorkspace.openSession === 'function') {
-            const originalOpenSession = ctx.uiWorkspace.openSession.bind(ctx.uiWorkspace);
-            ctx.uiWorkspace.openSession = function (target: any) {
+          const uiWorkspace = typeof ctx.get === 'function' ? ctx.get('uiWorkspace') : ctx?.uiWorkspace;
+          if (uiWorkspace && typeof uiWorkspace.openSession === 'function') {
+            const originalOpenSession = uiWorkspace.openSession.bind(uiWorkspace);
+            uiWorkspace.openSession = function (target: any) {
               const result = originalOpenSession(target);
               if (!lifecycle.navigating) {
                 const sid =
@@ -289,7 +293,7 @@ if (win?.__ModuleLoader__) {
               return result;
             };
             disposers.push(() => {
-              ctx.uiWorkspace.openSession = originalOpenSession;
+              uiWorkspace.openSession = originalOpenSession;
             });
           }
 
@@ -393,24 +397,6 @@ if (win?.__ModuleLoader__) {
             });
           }
 
-          if (ctx.remote && typeof ctx.remote.$on === 'function') {
-            try {
-              const disposeRemoteFocus = ctx.remote.$on(
-                'peripheral/focus-switched',
-                (slotIndex: number, sessionId: string | null) => {
-                  store.patch({ focusedSlot: slotIndex });
-                  if (sessionId) {
-                    navigateToSession(sessionId);
-                  }
-                }
-              );
-              if (typeof disposeRemoteFocus === 'function') {
-                disposers.push(disposeRemoteFocus);
-              }
-            } catch {
-              // ignore
-            }
-          }
 
           function statusLabel(status: string): string {
             const key = `status.${status}`;
@@ -658,7 +644,7 @@ if (win?.__ModuleLoader__) {
             );
           }
 
-          const slots = typeof ctx.get === 'function' ? ctx.get('slots') : ctx.slots;
+          const slots = typeof ctx.get === 'function' ? ctx.get('slots') : ctx?.slots;
           if (React && slots && typeof slots.inject === 'function') {
             try {
               disposers.push(

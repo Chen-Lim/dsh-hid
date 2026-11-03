@@ -2278,13 +2278,6 @@ final class DshWebSocketDaemon: @unchecked Sendable {
             return
         }
         let code = Int(event.getIntegerValueField(.keyboardEventKeycode))
-        if let targetSlot = DshJsonRpcSession.macFKeyCodesToSlot[code] {
-            guard let slot = rpcSession.slotsByIndex[targetSlot], slot.status != .inactive else { return }
-            if let json = try? rpcSession.buildSwitchFocusRequest(slotIndex: targetSlot) {
-                sendRpcRequest(json)
-            }
-            return
-        }
         if let json = try? rpcSession.handlePhysicalKeyCode(code) {
             sendRpcRequest(json)
         }
