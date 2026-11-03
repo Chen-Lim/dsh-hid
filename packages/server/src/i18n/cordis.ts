@@ -38,12 +38,19 @@ function isLocaleService(value: unknown): value is LocaleServiceLike {
 export function getLocaleService(host: unknown): LocaleServiceLike | undefined {
   if (!host || typeof host !== 'object') return undefined;
   const candidate = host as LocaleServiceHost;
-  let service: unknown = candidate.locale;
+  let service: unknown = undefined;
   if (typeof candidate.get === 'function') {
     try {
       service = candidate.get('locale');
     } catch {
-      // Host service unavailable (plugin not injected yet) — fall back to the property.
+      // Host service unavailable (plugin not injected yet) — fall back to property safely.
+    }
+  }
+  if (!service) {
+    try {
+      service = candidate.locale;
+    } catch {
+      // Accessing properties on Cordis Context without inject throws in cordis v4.
     }
   }
   return isLocaleService(service) ? service : undefined;
