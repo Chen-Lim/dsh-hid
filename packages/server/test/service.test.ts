@@ -109,6 +109,32 @@ describe('PeripheralServerService (Cordis integration)', () => {
     expect(service.router.getSlot(1)?.status).toBe(AgentPeripheralStatus.IDLE);
   });
 
+  it('tracks transportState, includes it in initial snapshot, and emits peripheral/transport-changed', async () => {
+    const events: any[] = [];
+    ctx.on('peripheral/transport-changed', (params) => {
+      events.push(params);
+    });
+
+    const handler = (service.wsServer as any).handler;
+    expect(service.getTransportState().transport).toBe('disconnected');
+
+    const btState = {
+      transport: 'bluetooth' as const,
+      model: 'NuPhy Air75 V3',
+      capabilities: {
+        rgb: false,
+        keys: true,
+        ledBlink: true,
+        wireless: true,
+      },
+    };
+
+    await handler.onTransportChanged(btState);
+    expect(service.getTransportState()).toEqual(btState);
+    expect(handler.getInitialSnapshot().transportState).toEqual(btState);
+    expect(events).toEqual([btState]);
+  });
+
   it('stops server cleanly when context is disposed', async () => {
     const stopSpy = vi.spyOn(service, 'stop');
     await ctx.emit('dispose');

@@ -268,4 +268,136 @@ describe('DSH Client Companion Plugin (client.ts)', () => {
 
     if (typeof cleanup === 'function') cleanup();
   });
+
+  it('renders transport badge, Bluetooth fallback notice, and plays chime on NEEDS_INPUT in Bluetooth mode', () => {
+    const clientJsPath = join(__dirname, '../dist/client.js');
+    const content = readFileSync(clientJsPath, 'utf8');
+
+    let capturedWs: any = null;
+    class MockWebSocket {
+      public static OPEN = 1;
+      public onopen: any;
+      public onmessage: any;
+      public onclose: any;
+      public onerror: any;
+      public readyState = 1;
+      public send = vi.fn();
+      public close = vi.fn();
+      constructor() {
+        capturedWs = this;
+      }
+    }
+    (globalThis as any).WebSocket = MockWebSocket;
+
+    const oscStart = vi.fn();
+    const oscStop = vi.fn();
+    (globalThis as any).window.AudioContext = class {
+      public currentTime = 0;
+      public destination = {};
+      createOscillator() {
+        return {
+          type: 'sine',
+          frequency: { setValueAtTime: vi.fn() },
+          connect: vi.fn(),
+          start: oscStart,
+          stop: oscStop,
+        };
+      }
+      createGain() {
+        return {
+          gain: { setValueAtTime: vi.fn(), exponentialRampToValueAtTime: vi.fn() },
+          connect: vi.fn(),
+        };
+      }
+    };
+
+    const fn = new Function('window', 'WebSocket', content);
+    fn((globalThis as any).window, MockWebSocket);
+
+    const renderedElements: Array<{ type: any; props: any; children: any[] }> = [];
+    const mockReact = {
+      createElement: vi.fn((type: any, props: any, ...children: any[]) => {
+        const el = { type, props, children };
+        renderedElements.push(el);
+        return el;
+      }),
+      useState: vi.fn(() => [0, () => {}]),
+      useEffect: vi.fn(),
+    };
+
+    const plugin = mockModuleLoader.load.mock.calls[0][0].factory((name: string) =>
+      name === 'react' ? mockReact : undefined
+    );
+
+    let panelComponent: (() => any) | null = null;
+    const inject = vi.fn((_key: string, register: () => unknown) => {
+      register();
+      return () => {};
+    });
+    const register = vi.fn((meta: any, comp: any) => {
+      if (meta.name === 'main' && meta.key === 'peripheral') {
+        panelComponent = comp;
+      }
+      return () => {};
+    });
+
+    const cleanup = plugin.apply({
+      uiWorkspace: { openSession: vi.fn() },
+      slots: { inject, register },
+    });
+
+    expect(panelComponent).not.toBeNull();
+
+    // Send snapshot + Bluetooth transportChanged
+    capturedWs.onmessage({
+      data: JSON.stringify({
+        method: 'peripheral/snapshot',
+        params: {
+          focusedSlot: 1,
+          slots: [{ slotIndex: 1, sessionId: 'sess-bt', status: 'RUNNING' }],
+        },
+      }),
+    });
+    capturedWs.onmessage({
+      data: JSON.stringify({
+        method: 'peripheral/transportChanged',
+        params: {
+          transport: 'bluetooth',
+          model: 'NuPhy Air75 V3',
+          capabilities: { rgb: false, keys: true, ledBlink: true, wireless: true },
+        },
+      }),
+    });
+
+    renderedElements.length = 0;
+    panelComponent!();
+
+    const badge = renderedElements.find(
+      (el) => el.props && el.props['data-testid'] === 'peripheral-transport-badge'
+    );
+    expect(badge).toBeDefined();
+    expect(badge?.children[0]).toContain('NuPhy Air75 V3');
+    expect(badge?.children[0]).toContain('Bluetooth (Keys Only)');
+
+    const notice = renderedElements.find(
+      (el) => el.props && el.props['data-testid'] === 'peripheral-bluetooth-notice'
+    );
+    expect(notice).toBeDefined();
+    expect(notice?.children[0]).toContain('Bluetooth mode active');
+
+    // Transition slot 1 from RUNNING -> NEEDS_INPUT while in Bluetooth mode -> plays chime
+    capturedWs.onmessage({
+      data: JSON.stringify({
+        method: 'peripheral/slotUpdated',
+        params: {
+          slotIndex: 1,
+          sessionId: 'sess-bt',
+          status: 'NEEDS_INPUT',
+        },
+      }),
+    });
+    expect(oscStart).toHaveBeenCalledTimes(1);
+
+    if (typeof cleanup === 'function') cleanup();
+  });
 });

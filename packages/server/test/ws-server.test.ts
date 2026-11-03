@@ -9,7 +9,9 @@ import {
   NOTIFICATION_SNAPSHOT,
   NOTIFICATION_SLOT_UPDATED,
   NOTIFICATION_FOCUS_CHANGED,
+  NOTIFICATION_TRANSPORT_CHANGED,
   createJsonRpcRequest,
+  createTransportChangedNotification,
   parseJsonRpcMessage,
   isJsonRpcSuccessResponse,
   isJsonRpcErrorResponse,
@@ -115,6 +117,7 @@ describe('PeripheralWsServer', () => {
       success: true,
       slotIndex,
     })),
+    onTransportChanged: vi.fn(),
   };
 
   beforeEach(async () => {
@@ -263,5 +266,37 @@ describe('PeripheralWsServer', () => {
     await new Promise((resolve) => setTimeout(resolve, 50));
     expect(server.getHardwareClientCount()).toBe(0);
     expect(server.getUiClientCount()).toBe(1);
+    expect(handler.onTransportChanged).toHaveBeenCalledWith({
+      transport: 'disconnected',
+      capabilities: { rgb: false, keys: false, ledBlink: false, wireless: false },
+    });
+  });
+
+  it('forwards peripheral/transportChanged notifications and broadcasts transportChanged', async () => {
+    client = await createConnectedClient();
+    await client.nextMessage();
+
+    const transportPayload = {
+      transport: '2.4g' as const,
+      model: 'Air75 V3 ANSI',
+      vendorId: 0x19f5,
+      productId: 0x2620,
+      capabilities: {
+        rgb: true,
+        keys: true,
+        ledBlink: false,
+        wireless: true,
+      },
+    };
+
+    client.send(createTransportChangedNotification(transportPayload));
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    expect(handler.onTransportChanged).toHaveBeenCalledWith(transportPayload);
+
+    server.broadcastTransportChanged(transportPayload);
+    const notif = await client.nextMessage();
+    expect(isJsonRpcNotification(notif)).toBe(true);
+    expect(notif.method).toBe(NOTIFICATION_TRANSPORT_CHANGED);
+    expect(notif.params).toEqual(transportPayload);
   });
 });

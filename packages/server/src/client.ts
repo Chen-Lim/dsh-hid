@@ -33,11 +33,25 @@ interface UiSlot {
   question?: { prompt: string; options: string[] };
 }
 
+interface UiTransportState {
+  transport: 'usb' | '2.4g' | 'bluetooth' | 'disconnected' | string;
+  model?: string;
+  vendorId?: number;
+  productId?: number;
+  capabilities?: {
+    rgb: boolean;
+    keys: boolean;
+    ledBlink: boolean;
+    wireless: boolean;
+  };
+}
+
 interface UiState {
   connected: boolean;
   focusedSlot: number;
   slots: UiSlot[];
   lastError: string | null;
+  transportState?: UiTransportState | null;
 }
 
 const MODULE_ID = 'dsh-plugin-peripheral-server';
@@ -69,6 +83,12 @@ const EN_DICT = {
   'status.NEEDS_INPUT': 'Needs input',
   'status.COMPLETED': 'Completed',
   'status.ERROR': 'Error',
+  'transport.usb': 'USB',
+  'transport.2.4g': '2.4G Wireless',
+  'transport.bluetooth': 'Bluetooth (Keys Only)',
+  'transport.disconnected': 'No Hardware',
+  bluetoothNotice:
+    'Bluetooth mode active: per-key RGB is unavailable over Bluetooth. Physical shortcut keys (F1–F12 / Y / N / Enter / Esc) and audio alerts remain active. Connect via USB or 2.4G Dongle for full RGB.',
 };
 
 const ZH_DICT = {
@@ -87,6 +107,12 @@ const ZH_DICT = {
   'status.NEEDS_INPUT': '等待输入',
   'status.COMPLETED': '已完成',
   'status.ERROR': '异常',
+  'transport.usb': '有线 USB',
+  'transport.2.4g': '2.4G 无线',
+  'transport.bluetooth': '蓝牙模式 (仅按键)',
+  'transport.disconnected': '未检测到硬件',
+  bluetoothNotice:
+    '当前处于蓝牙连接模式：蓝牙协议不支持单键 RGB 灯效，物理快捷键（F1–F12 / Y / N / Enter / Esc）与声音提示仍正常工作。插入 2.4G 接收器或 USB 线即可恢复完整灯效。',
 };
 
 const win = typeof window !== 'undefined' ? (window as DshWindow) : undefined;
@@ -196,6 +222,29 @@ if (win?.__ModuleLoader__) {
             }
           }
 
+          function playApprovalChime(): void {
+            try {
+              const AudioCtx =
+                (win as any)?.AudioContext || (win as any)?.webkitAudioContext;
+              if (typeof AudioCtx !== 'function') return;
+              const audioCtx = new AudioCtx();
+              const now = audioCtx.currentTime ?? 0;
+              const osc = audioCtx.createOscillator();
+              const gain = audioCtx.createGain();
+              osc.type = 'sine';
+              osc.frequency.setValueAtTime(660, now);
+              osc.frequency.setValueAtTime(880, now + 0.08);
+              gain.gain.setValueAtTime(0.08, now);
+              gain.gain.exponentialRampToValueAtTime(0.001, now + 0.22);
+              osc.connect(gain);
+              gain.connect(audioCtx.destination);
+              osc.start(now);
+              osc.stop(now + 0.22);
+            } catch {
+              // Audio is best-effort compensation when per-key RGB is unavailable in Bluetooth mode.
+            }
+          }
+
           function handleMessage(raw: string): void {
             let data: any;
             try {
@@ -210,11 +259,25 @@ if (win?.__ModuleLoader__) {
                   connected: true,
                   focusedSlot: typeof params.focusedSlot === 'number' ? params.focusedSlot : 1,
                   slots: Array.isArray(params.slots) ? params.slots : [],
+                  ...(params.transportState ? { transportState: params.transportState } : {}),
                 });
                 break;
-              case 'peripheral/slotUpdated':
+              case 'peripheral/slotUpdated': {
+                const slot = params && params.slot ? params.slot : params;
+                const prev = store
+                  .get()
+                  .slots.find((item) => item.slotIndex === slot?.slotIndex);
                 store.patchSlot(params);
+                const transport = store.get().transportState;
+                if (
+                  slot?.status === 'NEEDS_INPUT' &&
+                  prev?.status !== 'NEEDS_INPUT' &&
+                  (transport?.transport === 'bluetooth' || transport?.capabilities?.rgb === false)
+                ) {
+                  playApprovalChime();
+                }
                 break;
+              }
               case 'peripheral/focusChanged':
                 store.patch({
                   focusedSlot:
@@ -223,6 +286,11 @@ if (win?.__ModuleLoader__) {
                       : store.get().focusedSlot,
                 });
                 navigateToSession(params.sessionId);
+                break;
+              case 'peripheral/transportChanged':
+                if (params && typeof params.transport === 'string') {
+                  store.patch({ transportState: params });
+                }
                 break;
               default:
                 break;
@@ -541,6 +609,13 @@ if (win?.__ModuleLoader__) {
             );
           }
 
+          function transportLabel(transport: string | undefined): string | null {
+            if (!transport) return null;
+            const key = `transport.${transport.toLowerCase()}`;
+            const label = t(key);
+            return label === key ? transport.toUpperCase() : label;
+          }
+
           function PeripheralPanel() {
             const current = useStore(store);
             const rows: UiSlot[] = current.slots.length
@@ -549,6 +624,11 @@ if (win?.__ModuleLoader__) {
                   slotIndex: index + 1,
                   status: 'INACTIVE',
                 }));
+            const transportMode = current.transportState?.transport?.toLowerCase();
+            const badgeText =
+              current.connected && transportMode ? transportLabel(transportMode) : null;
+            const isBluetoothFallback =
+              current.connected && transportMode === 'bluetooth';
             return h(
               'div',
               {
@@ -583,7 +663,28 @@ if (win?.__ModuleLoader__) {
                     },
                   },
                   current.connected ? t('connected') : t('disconnected')
-                )
+                ),
+                badgeText
+                  ? h(
+                      'span',
+                      {
+                        'data-testid': 'peripheral-transport-badge',
+                        style: {
+                          fontSize: '11px',
+                          padding: '2px 8px',
+                          borderRadius: '999px',
+                          border: '1px solid var(--dsw-alias-border-l1)',
+                          background: 'var(--dsw-alias-bg-layer-1)',
+                          color: isBluetoothFallback
+                            ? 'var(--dsw-alias-state-warn-primary)'
+                            : 'var(--dsw-alias-label-secondary)',
+                        },
+                      },
+                      current.transportState?.model
+                        ? `${current.transportState.model} · ${badgeText}`
+                        : badgeText
+                    )
+                  : null
               ),
               h(
                 'p',
@@ -596,6 +697,26 @@ if (win?.__ModuleLoader__) {
                 },
                 t('subtitle')
               ),
+              isBluetoothFallback
+                ? h(
+                    'div',
+                    {
+                      role: 'status',
+                      'data-testid': 'peripheral-bluetooth-notice',
+                      style: {
+                        margin: '0 0 14px',
+                        padding: '10px 12px',
+                        borderRadius: '6px',
+                        border: '1px solid var(--dsw-alias-state-warn-primary)',
+                        background: 'var(--dsw-alias-bg-layer-1)',
+                        fontSize: '12px',
+                        lineHeight: 1.5,
+                        color: 'var(--dsw-alias-label-primary)',
+                      },
+                    },
+                    t('bluetoothNotice')
+                  )
+                : null,
               h(
                 'div',
                 {

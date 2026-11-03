@@ -7,6 +7,7 @@ import {
   METHOD_SET_BRAINPOWER,
   METHOD_SELECT_OPTION,
   METHOD_ABORT,
+  NOTIFICATION_TRANSPORT_CHANGED,
   RPC_METHOD_NOT_FOUND,
   RPC_INVALID_PARAMS,
   RPC_INTERNAL_ERROR,
@@ -18,8 +19,10 @@ import {
   createSlotUpdatedNotification,
   createFocusChangedNotification,
   createServerShuttingDownNotification,
+  createTransportChangedNotification,
   serializeJsonRpcMessage,
   isJsonRpcRequest,
+  isJsonRpcNotification,
   isValidSlotIndex,
   ProtocolError,
   type JsonRpcMessage,
@@ -29,6 +32,7 @@ import {
   type BrainpowerLevel,
   type OptionAction,
   type SnapshotParams,
+  type TransportChangedParams,
 } from '@dsh-hid/protocol';
 
 export interface PeripheralRpcHandler {
@@ -45,6 +49,7 @@ export interface PeripheralRpcHandler {
   ): Promise<{ success: boolean; slotIndex: number }>;
   onAbort?(slotIndex: number): Promise<{ success: boolean; slotIndex: number }>;
   onSessionOpened?(sessionId: string): Promise<{ success: boolean; slotIndex?: number }>;
+  onTransportChanged?(params: TransportChangedParams): void | Promise<void>;
   getInitialSnapshot?(): SnapshotParams;
 }
 
@@ -149,7 +154,8 @@ export class PeripheralWsServer {
 
     // In-page consumers connect with `?role=ui`; they must never be mistaken for a
     // hardware daemon by ApprovalArbiter's availability check.
-    if (isUiConnection(request?.url)) {
+    const isUi = isUiConnection(request?.url);
+    if (isUi) {
       this.uiClients.add(client);
     }
 
@@ -166,22 +172,37 @@ export class PeripheralWsServer {
       }
     });
 
-    client.on('close', () => {
-      this.activeClients.delete(client);
+    const handleDisconnect = () => {
+      const wasActive = this.activeClients.delete(client);
       this.uiClients.delete(client);
-    });
+      if (wasActive && !isUi && this.getHardwareClientCount() === 0 && this.handler?.onTransportChanged) {
+        void Promise.resolve(
+          this.handler.onTransportChanged({
+            transport: 'disconnected',
+            capabilities: { rgb: false, keys: false, ledBlink: false, wireless: false },
+          })
+        ).catch((err) => {
+          console.error('[PeripheralWsServer] Failed to handle transport disconnect:', err);
+        });
+      }
+    };
+
+    client.on('close', handleDisconnect);
 
     client.on('error', (err) => {
       console.error('[PeripheralWsServer] Client socket error:', err);
-      this.activeClients.delete(client);
-      this.uiClients.delete(client);
+      handleDisconnect();
     });
 
     // Send initial snapshot on new client connection if available
     if (this.handler?.getInitialSnapshot) {
       try {
         const snapshot = this.handler.getInitialSnapshot();
-        const notification = createSnapshotNotification(snapshot.focusedSlot, snapshot.slots);
+        const notification = createSnapshotNotification(
+          snapshot.focusedSlot,
+          snapshot.slots,
+          snapshot.transportState
+        );
         this.sendToClient(client, notification);
       } catch (err) {
         console.error('[PeripheralWsServer] Failed to send initial snapshot:', err);
@@ -202,6 +223,11 @@ export class PeripheralWsServer {
 
     if (isJsonRpcRequest(message)) {
       await this.dispatchRequest(client, message);
+    } else if (isJsonRpcNotification(message) && message.method === NOTIFICATION_TRANSPORT_CHANGED) {
+      const params = message.params as unknown as TransportChangedParams | undefined;
+      if (params && typeof params.transport === 'string' && params.capabilities) {
+        await this.handler?.onTransportChanged?.(params);
+      }
     }
   }
 
@@ -321,6 +347,20 @@ export class PeripheralWsServer {
           break;
         }
 
+        case NOTIFICATION_TRANSPORT_CHANGED: {
+          const transportParams = p as unknown as TransportChangedParams;
+          if (!transportParams.transport || !transportParams.capabilities) {
+            this.sendToClient(
+              client,
+              createJsonRpcErrorResponse(id, RPC_INVALID_PARAMS, 'Missing required params: transport, capabilities')
+            );
+            break;
+          }
+          await this.handler?.onTransportChanged?.(transportParams);
+          this.sendToClient(client, createJsonRpcSuccessResponse(id, { success: true }));
+          break;
+        }
+
         default: {
           this.sendToClient(
             client,
@@ -373,8 +413,19 @@ export class PeripheralWsServer {
   /**
    * Broadcasts full snapshot to all connected clients.
    */
-  public broadcastSnapshot(focusedSlot: number, slots: SlotInfo[]): void {
-    this.broadcast(createSnapshotNotification(focusedSlot, slots));
+  public broadcastSnapshot(
+    focusedSlot: number,
+    slots: SlotInfo[],
+    transportState?: TransportChangedParams
+  ): void {
+    this.broadcast(createSnapshotNotification(focusedSlot, slots, transportState));
+  }
+
+  /**
+   * Broadcasts a hardware transport mode change notification.
+   */
+  public broadcastTransportChanged(params: TransportChangedParams): void {
+    this.broadcast(createTransportChangedNotification(params));
   }
 
   /**

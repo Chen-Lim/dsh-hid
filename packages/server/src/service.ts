@@ -5,6 +5,7 @@ import {
   type BrainpowerDirection,
   type OptionAction,
   type SlotInfo,
+  type TransportChangedParams,
   DEFAULT_PORT,
   DEFAULT_HOST,
   DEFAULT_PATH,
@@ -110,6 +111,15 @@ export class PeripheralServerService extends Service {
   private readonly autoBindSlots: boolean;
   private readonly forceArbitration: boolean;
   private readonly autoStartDaemon: boolean;
+  private transportState: TransportChangedParams = {
+    transport: 'disconnected',
+    capabilities: {
+      rgb: false,
+      keys: false,
+      ledBlink: false,
+      wireless: false,
+    },
+  };
 
   constructor(ctx: Context, config?: PeripheralServerConfig) {
     super(ctx, 'peripheralServer');
@@ -133,7 +143,15 @@ export class PeripheralServerService extends Service {
     this.autoStartDaemon = config?.autoStartDaemon ?? (!isVitest);
 
     const rpcHandler: PeripheralRpcHandler = {
-      getInitialSnapshot: () => this.router.getSnapshot(),
+      getInitialSnapshot: () => ({
+        ...this.router.getSnapshot(),
+        transportState: this.transportState,
+      }),
+      onTransportChanged: (params: TransportChangedParams) => {
+        this.transportState = params;
+        this.wsServer.broadcastTransportChanged(params);
+        this.ctx.emit('peripheral/transport-changed', params);
+      },
       onSwitchFocus: async (slotIndex: number) => {
         let currentSlot = this.router.getSlot(slotIndex);
         if (currentSlot?.status === AgentPeripheralStatus.COMPLETED) {
@@ -580,6 +598,13 @@ export class PeripheralServerService extends Service {
   }
 
   /**
+   * Returns the latest hardware transport mode and capabilities reported by the daemon.
+   */
+  public getTransportState(): TransportChangedParams {
+    return this.transportState;
+  }
+
+  /**
    * Activates the DeepSeek Harness macOS desktop application window.
    */
   public bringWindowToFront(): void {
@@ -656,5 +681,6 @@ declare module 'cordis' {
     'peripheral/brainpower-changed'(slotIndex: number, level: BrainpowerLevel, sessionId: string | null): void;
     'peripheral/option-selected'(slotIndex: number, optionIndex: number, action: OptionAction, sessionId: string | null): void;
     'peripheral/abort-requested'(slotIndex: number, sessionId: string | null): void;
+    'peripheral/transport-changed'(params: TransportChangedParams): void;
   }
 }
