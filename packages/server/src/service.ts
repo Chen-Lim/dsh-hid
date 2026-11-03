@@ -18,6 +18,13 @@ import {
   type ApprovalRequestEvent,
   type DshAgentRef,
 } from './arbiter.js';
+import {
+  bindCordisLocale,
+  getLocaleService,
+  PERIPHERAL_CATALOGS,
+  PERIPHERAL_NAMESPACE,
+  type CordisLocaleBinding,
+} from './i18n/index.js';
 
 export interface PeripheralServerConfig {
   host?: string;
@@ -107,12 +114,19 @@ export class PeripheralServerService extends Service {
   public readonly wsServer: PeripheralWsServer;
   public readonly arbiter: ApprovalArbiter;
   public readonly daemonManager: DaemonManager;
+  public readonly localeBinding: CordisLocaleBinding;
   private readonly autoBindSlots: boolean;
   private readonly forceArbitration: boolean;
   private readonly autoStartDaemon: boolean;
 
   constructor(ctx: Context, config?: PeripheralServerConfig) {
     super(ctx, 'peripheralServer');
+
+    this.localeBinding = bindCordisLocale(
+      getLocaleService(ctx),
+      PERIPHERAL_NAMESPACE,
+      PERIPHERAL_CATALOGS
+    );
 
     this.autoBindSlots = config?.autoBindSlots ?? true;
     this.forceArbitration = config?.forceArbitration ?? false;
@@ -610,6 +624,7 @@ export class PeripheralServerService extends Service {
    * Stops the peripheral server and terminates active client connections and daemon process.
    */
   public async stop(): Promise<void> {
+    this.localeBinding.dispose();
     await this.daemonManager.stop();
     await this.wsServer.close();
   }

@@ -61,8 +61,25 @@ function lookup(
   key: string
 ): string | undefined {
   const catalog = catalogs[locale];
-  if (!catalog || !Object.prototype.hasOwnProperty.call(catalog, key)) return undefined;
-  return catalog[key];
+  if (!catalog) return undefined;
+  if (Object.prototype.hasOwnProperty.call(catalog, key)) {
+    const direct = catalog[key];
+    if (typeof direct === 'string') return direct;
+  }
+  if (key.includes('.')) {
+    const parts = key.split('.');
+    let curr: any = catalog;
+    for (const part of parts) {
+      if (curr && typeof curr === 'object' && part in curr) {
+        curr = curr[part];
+      } else {
+        curr = undefined;
+        break;
+      }
+    }
+    if (typeof curr === 'string') return curr;
+  }
+  return undefined;
 }
 
 /**

@@ -5,14 +5,23 @@
  * mirrored 1:1 into `locale/*.json` and shipped to the Plugin Manager.
  */
 
-/** Locale identifiers that ship with a catalog. Extend when adding a language. */
-export type LocaleId = 'en' | 'zh-CN';
+/** Locale identifiers that ship with a catalog. Official DSH uses 'zh' and 'en'. */
+export type LocaleId = 'en' | 'zh' | 'zh-CN';
 
 /** Loose locale input accepted from configuration / the host (`en-US`, `zh`, ...). */
 export type LocaleInput = string;
 
-/** Flat message catalog: dotted key -> localized message. */
-export type MessageCatalog = Readonly<Record<string, string>>;
+/** Plugin Manager metadata for DSH package discovery. */
+export interface PluginMetadata {
+  readonly title: string;
+  readonly description: string;
+}
+
+/** Flat message catalog with optional nested `meta` block for DSH Plugin Manager. */
+export type MessageCatalog = Readonly<{
+  meta?: PluginMetadata;
+  [key: string]: string | PluginMetadata | undefined;
+}>;
 
 /** Catalogs keyed by locale. Missing locales fall back to `fallbackLocale`. */
 export type CatalogSet = Readonly<Partial<Record<LocaleId, MessageCatalog>>>;

@@ -1,4 +1,8 @@
 {
+  "meta": {
+    "title": "外设",
+    "description": "由外设桥接服务上报的物理槽位状态。"
+  },
   "meta.title": "外设",
   "meta.description": "由外设桥接服务上报的物理槽位状态。",
   "title": "外设",

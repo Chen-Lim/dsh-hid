@@ -14,6 +14,10 @@ import type { CatalogSet, MessageCatalog } from './types.js';
 export const PERIPHERAL_NAMESPACE = 'peripheral';
 
 export const EN_MESSAGES: MessageCatalog = {
+  meta: {
+    title: 'Peripheral',
+    description: 'Physical slot status reported by the peripheral bridge.',
+  },
   'meta.title': 'Peripheral',
   'meta.description': 'Physical slot status reported by the peripheral bridge.',
 
@@ -35,7 +39,11 @@ export const EN_MESSAGES: MessageCatalog = {
   'status.ERROR': 'Error',
 };
 
-export const ZH_CN_MESSAGES: MessageCatalog = {
+export const ZH_MESSAGES: MessageCatalog = {
+  meta: {
+    title: '外设',
+    description: '由外设桥接服务上报的物理槽位状态。',
+  },
   'meta.title': '外设',
   'meta.description': '由外设桥接服务上报的物理槽位状态。',
 
@@ -57,7 +65,10 @@ export const ZH_CN_MESSAGES: MessageCatalog = {
   'status.ERROR': '异常',
 };
 
+export const ZH_CN_MESSAGES: MessageCatalog = ZH_MESSAGES;
+
 export const PERIPHERAL_CATALOGS: CatalogSet = {
   en: EN_MESSAGES,
+  zh: ZH_MESSAGES,
   'zh-CN': ZH_CN_MESSAGES,
 };

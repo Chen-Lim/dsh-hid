@@ -1,4 +1,8 @@
 {
+  "meta": {
+    "title": "Peripheral",
+    "description": "Physical slot status reported by the peripheral bridge."
+  },
   "meta.title": "Peripheral",
   "meta.description": "Physical slot status reported by the peripheral bridge.",
   "title": "Peripheral",

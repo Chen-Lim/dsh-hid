@@ -54,6 +54,8 @@ export function getLocaleService(host: unknown): LocaleServiceLike | undefined {
  * report a bare language code still resolve a catalog.
  */
 function aliasesFor(locale: LocaleId): string[] {
+  if (locale === 'zh-CN') return ['zh'];
+  if (locale === 'zh') return ['zh-CN'];
   const base = locale.split('-')[0];
   return base === locale ? [] : [base];
 }
@@ -82,6 +84,7 @@ export function bindCordisLocale(
       const messages = catalogs[locale];
       if (!messages) continue;
       for (const id of [locale, ...aliasesFor(locale)]) {
+        if (registered.includes(id)) continue;
         try {
           const dispose = localeService.register(namespace, id, messages);
           registered.push(id);

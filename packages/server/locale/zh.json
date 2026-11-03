@@ -1,0 +1,23 @@
+{
+  "meta": {
+    "title": "外设",
+    "description": "由外设桥接服务上报的物理槽位状态。"
+  },
+  "meta.title": "外设",
+  "meta.description": "由外设桥接服务上报的物理槽位状态。",
+  "title": "外设",
+  "subtitle": "由外设桥接服务上报的物理槽位状态。",
+  "connected": "桥接已连接",
+  "disconnected": "桥接未连接",
+  "slot": "槽位",
+  "session": "会话",
+  "status": "状态",
+  "tool": "工具",
+  "error": "连接异常，正在重试…",
+  "status.INACTIVE": "未使用",
+  "status.IDLE": "空闲",
+  "status.RUNNING": "运行中",
+  "status.NEEDS_INPUT": "等待输入",
+  "status.COMPLETED": "已完成",
+  "status.ERROR": "异常"
+}
