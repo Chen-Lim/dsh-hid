@@ -268,4 +268,85 @@ describe('DSH Client Companion Plugin (client.ts)', () => {
 
     if (typeof cleanup === 'function') cleanup();
   });
+
+  it('registers dictionaries with ctx.locale and reacts to locale switching', () => {
+    const clientJsPath = join(__dirname, '../dist/client.js');
+    const content = readFileSync(clientJsPath, 'utf8');
+
+    class MockWebSocket {
+      public static OPEN = 1;
+      public onopen: any;
+      public onmessage: any;
+      public onclose: any;
+      public onerror: any;
+      public readyState = 1;
+      public send = vi.fn();
+      public close = vi.fn();
+    }
+    (globalThis as any).WebSocket = MockWebSocket;
+
+    const fn = new Function('window', 'WebSocket', content);
+    fn((globalThis as any).window, MockWebSocket);
+
+    let activeLocale = 'zh';
+    let localeSubscriber: (() => void) | null = null;
+    const registerSpy = vi.fn();
+    const mockLocale = {
+      register: registerSpy.mockImplementation((_ns: string, _lang: string, _dict: any) => () => {}),
+      bind: vi.fn((_ns: string) => (key: string) => {
+        if (activeLocale === 'en') {
+          return key === 'title' ? 'Peripheral' : key;
+        }
+        return key === 'title' ? '外设' : key;
+      }),
+      subscribe: vi.fn((cb: () => void) => {
+        localeSubscriber = cb;
+        return () => {
+          localeSubscriber = null;
+        };
+      }),
+    };
+
+    const inject = vi.fn((_key: string, reg: () => unknown) => {
+      reg();
+      return () => {};
+    });
+    const register = vi.fn(() => () => {});
+
+    const mockReact = {
+      createElement: vi.fn(() => null),
+      useState: vi.fn(() => [0, () => {}]),
+      useEffect: vi.fn(),
+    };
+
+    const plugin = mockModuleLoader.load.mock.calls[0][0].factory((name: string) =>
+      name === 'react' ? mockReact : undefined
+    );
+    const ctx = {
+      locale: mockLocale,
+      slots: { inject, register },
+      uiWorkspace: { openSession: vi.fn() },
+    };
+
+    const cleanup = plugin.apply(ctx);
+
+    // Dictionaries registered for en, zh, and zh-CN
+    expect(registerSpy).toHaveBeenCalledWith('peripheral', 'en', expect.any(Object));
+    expect(registerSpy).toHaveBeenCalledWith('peripheral', 'zh', expect.any(Object));
+    expect(registerSpy).toHaveBeenCalledWith('peripheral', 'zh-CN', expect.any(Object));
+
+    // Initially Chinese
+    const sidebarCall = register.mock.calls.find((call) => call[0]?.name === 'sidebar.panellist')?.[0];
+    expect(sidebarCall?.label()).toBe('外设');
+
+    // Switch to English
+    activeLocale = 'en';
+    expect(localeSubscriber).toBeTypeOf('function');
+    localeSubscriber?.();
+
+    // Dynamically reflects English translation
+    expect(sidebarCall?.label()).toBe('Peripheral');
+
+    if (typeof cleanup === 'function') cleanup();
+  });
 });
