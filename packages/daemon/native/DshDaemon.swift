@@ -188,7 +188,7 @@ final class KeyAdaptation {
         else { try save(pending);throw failure("KEY_MAPPING_RESTORE", "部分按键尚未恢复，备份已保留，请重试恢复。") }
         return ["restored":true]
     }
-    func apply(_ command: [String:Any]) throws -> [String:Any] {
+    func apply(_ command: [String:Any], requireInputMonitoring: Bool = true) throws -> [String:Any] {
         guard let rows = command["mappings"] as? [[String:UInt64]],
               command["profile"] == nil || command["profile"] as? String == "keycaps",
               Self.validMappings(rows,bluetooth:command["transport"] as? String == "bluetooth",keycaps:command["profile"] as? String == "keycaps") else { throw failure("KEY_MAPPING_INVALID", "按键适配参数无效。") }
@@ -198,7 +198,9 @@ final class KeyAdaptation {
         client = IOHIDEventSystemClientCreateSimpleClient(kCFAllocatorDefault)
         let devices = try targetServices(command)
         if rows.isEmpty { return ["applied":true,"verified":true,"services":0] }
-        guard CGPreflightListenEventAccess() else { throw failure("INPUT_MONITORING_REQUIRED", "请先允许输入监控，再继续适配。") }
+        if requireInputMonitoring {
+            guard CGPreflightListenEventAccess() else { throw failure("INPUT_MONITORING_REQUIRED", "请先允许输入监控，再继续适配。") }
+        }
         guard !devices.isEmpty else { throw failure("DEVICE_NOT_FOUND", "请连接要适配的 Air75 V3。") }
         var records = [[String:Any]]()
         do {
@@ -995,6 +997,9 @@ final class Air75Device {
     private func ensureBackup() throws {
         _ = try requireConnected()
         if mutationAttempted, backup != nil { return }
+        if recoveryPending {
+            _ = try? restore()
+        }
         guard !recoveryPending else {
             throw failure("RECOVERY_REQUIRED", "A previous lighting backup exists. Call restore before starting another lighting session.")
         }
@@ -1753,6 +1758,16 @@ final class DshJsonRpcSession {
         slotsByIndex.values.contains { $0.status != .inactive }
     }
 
+    var shouldPulseFocusedSlot: Bool {
+        guard let focused = slotsByIndex[focusedSlot] else { return false }
+        switch focused.status {
+        case .running, .needsInput, .error:
+            return true
+        case .inactive, .idle, .completed:
+            return false
+        }
+    }
+
     func handleIncomingJson(_ text: String, nowMs: Double = ProcessInfo.processInfo.systemUptime * 1000.0) throws -> IncomingAction {
         guard let data = text.data(using: .utf8),
               let obj = try JSONSerialization.jsonObject(with: data) as? [String: Any],
@@ -1934,11 +1949,33 @@ final class DshWebSocketDaemon: @unchecked Sendable {
     private var wsTask: URLSessionWebSocketTask?
     private var frameTimer: DispatchSourceTimer?
     private var reconnectWorkItem: DispatchWorkItem?
+    private var keyTap: CFMachPort?
+    private var keyTapSource: CFRunLoopSource?
+    private var lastAdaptedSlots = [Int]()
     private var currentDelayMs: Double = 500.0
     private let initialDelayMs: Double = 500.0
     private let maxDelayMs: Double = 5000.0
     private let backoffMultiplier: Double = 1.5
     private var running = false
+
+    private static let macMediaKeySources: [Int: UInt64] = [
+        105:   0x700000069, // Brightness Down (Mac factory F1)
+        106:   0x70000006a, // Brightness Up (Mac factory F2)
+        32262: 0xc0000029f, // Mission Control (Mac factory F3)
+        32264: 0xc000000cf, // Dictation / Voice Command (Mac factory F5)
+        32278: 0x10000009b, // Do Not Disturb (Mac factory F6)
+        172:   0xc000000b6, // Previous Track (Mac factory F7)
+        174:   0xc000000cd, // Play/Pause (Mac factory F8)
+        171:   0xc000000b5, // Next Track (Mac factory F9)
+        168:   0xc000000e2, // Mute (Mac factory F10)
+        170:   0xc000000ea, // Volume Down (Mac factory F11)
+        169:   0xc000000e9  // Volume Up (Mac factory F12)
+    ]
+
+    private var hardwareMockMode: Bool {
+        let env = ProcessInfo.processInfo.environment
+        return env["DSH_HID_MOCK"] == "1" || env["VITEST"] == "true"
+    }
 
     init(url: URL, server: JSONServer) {
         self.url = url
@@ -1948,13 +1985,20 @@ final class DshWebSocketDaemon: @unchecked Sendable {
     func start() {
         guard !running else { return }
         running = true
+        if !hardwareMockMode && server.device.recoveryPending {
+            _ = try? server.device.restore()
+        }
         emit(["event": "dshDaemonStarted", "url": url.absoluteString])
+        if !hardwareMockMode {
+            startGlobalKeyTapIfPermitted()
+        }
         connectWebSocket()
         startFrameLoop()
     }
 
     func stop() {
         running = false
+        stopGlobalKeyTap()
         reconnectWorkItem?.cancel()
         reconnectWorkItem = nil
         frameTimer?.cancel()
@@ -2030,6 +2074,7 @@ final class DshWebSocketDaemon: @unchecked Sendable {
                 if server.device.connected && server.device.recoveryPending {
                     _ = try? server.device.restore()
                 }
+                server.shutdown()
             case .rpcResponse(let id, let ok):
                 emit(["event": "dshRpcResponse", "id": id, "ok": ok])
             case .none:
@@ -2042,9 +2087,13 @@ final class DshWebSocketDaemon: @unchecked Sendable {
 
     private func startFrameLoop() {
         let timer = DispatchSource.makeTimerSource(queue: .main)
-        timer.schedule(deadline: .now() + 0.033, repeating: 0.033) // ~30 FPS delta-diff loop
+        timer.schedule(deadline: .now() + 0.033, repeating: 0.033) // ~30 FPS delta-diff loop for breathing states
         timer.setEventHandler { [weak self] in
-            guard let self = self, self.running, self.rpcSession.hasActiveSlots else { return }
+            guard let self = self,
+                  self.running,
+                  !self.hardwareMockMode,
+                  self.rpcSession.hasActiveSlots,
+                  self.rpcSession.shouldPulseFocusedSlot else { return }
             let nowMs = ProcessInfo.processInfo.systemUptime * 1000.0
             if self.server.device.connected && self.server.device.armed {
                 _ = try? self.rpcSession.syncToDevice(self.server.device, nowMs: nowMs, updateSide: false, verify: false, pulseFocused: true)
@@ -2055,12 +2104,162 @@ final class DshWebSocketDaemon: @unchecked Sendable {
     }
 
     private func renderToHardwareIfAvailable(nowMs: Double, updateSide: Bool) {
+        guard !hardwareMockMode else { return }
         do {
-            _ = try rpcSession.syncToDevice(server.device, nowMs: nowMs, updateSide: updateSide, verify: false, pulseFocused: true)
+            if !rpcSession.hasActiveSlots {
+                if server.device.connected {
+                    syncActiveFunctionKeys()
+                    if server.device.armed && server.device.recoveryPending {
+                        _ = try? server.device.restore()
+                    }
+                }
+                return
+            }
+            _ = try rpcSession.syncToDevice(
+                server.device,
+                nowMs: nowMs,
+                updateSide: updateSide,
+                verify: false,
+                pulseFocused: rpcSession.shouldPulseFocusedSlot
+            )
+            syncActiveFunctionKeys()
         } catch let error as BridgeError where error.code == "DEVICE_NOT_FOUND" {
             // Hardware not currently plugged in over USB; keep tracking state in memory.
         } catch {
             diagnostic("Hardware sync warning: \(error)")
+        }
+    }
+
+    private func syncActiveFunctionKeys() {
+        guard server.device.connected else { return }
+        let activeSlots = (1...12).filter { (rpcSession.slotsByIndex[$0]?.status ?? .inactive) != .inactive }
+        guard activeSlots != lastAdaptedSlots else { return }
+
+        if activeSlots.isEmpty {
+            _ = try? server.adaptation.restore()
+            if server.device.hasFunctionKeyBackup {
+                _ = try? server.device.restoreFunctionKey()
+            }
+            lastAdaptedSlots = []
+            return
+        }
+
+        do {
+            var map = try server.device.readKeymap()
+            if activeSlots.contains(4) {
+                if let mode = map["mode"] as? Int, mode == 0,
+                   let defaults = map["defaults"] as? [[Int]], defaults.count == 2,
+                   let f4Pos = defaults[1].firstIndex(of: 61),
+                   let active = map["active"] as? [Int], f4Pos < active.count,
+                   active[f4Pos] == 32263 {
+                    _ = try? server.device.prepareFunctionKey()
+                    map = try server.device.readKeymap()
+                }
+            } else if server.device.hasFunctionKeyBackup {
+                _ = try? server.device.restoreFunctionKey()
+                map = try server.device.readKeymap()
+            }
+
+            guard let defaults = map["defaults"] as? [[Int]], defaults.count == 2,
+                  let active = map["active"] as? [Int], active.count == 98,
+                  let locationId = map["locationId"] as? Int, locationId > 0 else {
+                return
+            }
+
+            let winFactory = defaults[1]
+            var mappings = [[String: UInt64]]()
+            for slotIndex in activeSlots {
+                let target = 57 + slotIndex // 58 (F1) .. 69 (F12)
+                guard let pos = winFactory.firstIndex(of: target),
+                      winFactory.lastIndex(of: target) == pos,
+                      pos < 96 else { continue }
+                let source = active[pos]
+                if source == target { continue }
+                let usage: UInt64?
+                if source == target + 46 {
+                    usage = 0x700000000 + UInt64(source)
+                } else {
+                    usage = Self.macMediaKeySources[source]
+                }
+                guard let srcUsage = usage,
+                      !mappings.contains(where: { $0["HIDKeyboardModifierMappingSrc"] == srcUsage }) else {
+                    continue
+                }
+                mappings.append([
+                    "HIDKeyboardModifierMappingSrc": srcUsage,
+                    "HIDKeyboardModifierMappingDst": 0x700000000 + UInt64(target)
+                ])
+            }
+
+            _ = try server.adaptation.apply([
+                "locationId": UInt64(locationId),
+                "mappings": mappings
+            ], requireInputMonitoring: false)
+            lastAdaptedSlots = activeSlots
+        } catch {
+            diagnostic("Function key adaptation warning: \(error)")
+        }
+    }
+
+    private func startGlobalKeyTapIfPermitted() {
+        guard keyTap == nil, CGPreflightListenEventAccess() else { return }
+        let context = Unmanaged.passUnretained(self).toOpaque()
+        let mask = CGEventMask(1) << CGEventType.keyDown.rawValue
+        guard let tap = CGEvent.tapCreate(
+            tap: .cgSessionEventTap,
+            place: .headInsertEventTap,
+            options: .listenOnly,
+            eventsOfInterest: mask,
+            callback: { _, type, event, context in
+                if let context = context {
+                    Unmanaged<DshWebSocketDaemon>.fromOpaque(context).takeUnretainedValue().handleGlobalKeyEvent(type, event)
+                }
+                return Unmanaged.passUnretained(event)
+            },
+            userInfo: context
+        ) else { return }
+        guard let source = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, tap, 0) else {
+            CFMachPortInvalidate(tap)
+            return
+        }
+        keyTap = tap
+        keyTapSource = source
+        CFRunLoopAddSource(CFRunLoopGetMain(), source, .commonModes)
+        CGEvent.tapEnable(tap: tap, enable: true)
+    }
+
+    private func stopGlobalKeyTap() {
+        if let tap = keyTap {
+            CGEvent.tapEnable(tap: tap, enable: false)
+            CFMachPortInvalidate(tap)
+        }
+        if let source = keyTapSource {
+            CFRunLoopRemoveSource(CFRunLoopGetMain(), source, .commonModes)
+        }
+        keyTap = nil
+        keyTapSource = nil
+    }
+
+    private func handleGlobalKeyEvent(_ type: CGEventType, _ event: CGEvent) {
+        if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
+            if let tap = keyTap { CGEvent.tapEnable(tap: tap, enable: true) }
+            return
+        }
+        guard type == .keyDown,
+              event.getIntegerValueField(.keyboardEventAutorepeat) == 0,
+              event.flags.intersection(KeyHooks.modifierMask).isEmpty else {
+            return
+        }
+        let code = Int(event.getIntegerValueField(.keyboardEventKeycode))
+        if let targetSlot = DshJsonRpcSession.macFKeyCodesToSlot[code] {
+            guard let slot = rpcSession.slotsByIndex[targetSlot], slot.status != .inactive else { return }
+            if let json = try? rpcSession.buildSwitchFocusRequest(slotIndex: targetSlot) {
+                sendRpcRequest(json)
+            }
+            return
+        }
+        if let json = try? rpcSession.handlePhysicalKeyCode(code) {
+            sendRpcRequest(json)
         }
     }
 
@@ -3007,6 +3206,23 @@ DispatchQueue.global(qos: .userInitiated).async {
     }
     if !hasWsDaemon {
         DispatchQueue.main.async { server.finishInput() }
+    } else {
+        DispatchQueue.main.async {
+            wsDaemon?.stop()
+            server.shutdown()
+        }
     }
+}
+if hasWsDaemon {
+    let ppidCheckTimer = DispatchSource.makeTimerSource(queue: .main)
+    ppidCheckTimer.schedule(deadline: .now() + 1.0, repeating: 1.0)
+    ppidCheckTimer.setEventHandler {
+        if getppid() == 1 {
+            diagnostic("Parent process terminated. Shutting down daemon cleanly.")
+            wsDaemon?.stop()
+            server.shutdown()
+        }
+    }
+    ppidCheckTimer.resume()
 }
 CFRunLoopRun()

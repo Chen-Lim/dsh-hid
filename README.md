@@ -102,9 +102,9 @@ pnpm test:native
 pnpm typecheck
 ```
 
-### 4.3 方式一：加载 Cordis 服务端插件 (Harness 内)
+### 4.3 方式一：加载 Cordis 服务端插件 (Harness 内自启管理)
 
-在 DeepSeek Harness 的 Cordis 配置文件中声明或直接以代码方式装载：
+在 DeepSeek Harness 的 Cordis 配置文件中声明或直接以代码方式装载。插件内置 `DaemonManager`，**默认在 Harness 启动时自动发现并托管拉起硬件守护进程**，并在应用退出时优雅释放硬件并恢复原生灯效：
 
 ```typescript
 import { Context } from 'cordis';
@@ -114,6 +114,7 @@ const ctx = new Context();
 ctx.plugin(PeripheralServerService, {
   port: 45678,
   autoBindSlots: true,
+  autoStartDaemon: true, // 启动 DSH 时顺手自动拉起硬件守护进程
 });
 await ctx.start();
 ```

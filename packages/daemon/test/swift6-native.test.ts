@@ -366,17 +366,21 @@ describe('Swift 6 Native S4 Daemon (DshDaemon.swift) Cross-Verification', () => 
       );
 
       // Wait for Swift 6 daemon to receive NEEDS_INPUT state update
-      await new Promise((r) => setTimeout(r, 200));
-      harness.sendJsonl({ id: 201, op: 'dshState' });
-      const approvalStateRes = await harness.waitForMessage((m) => m.id === 201);
-      const approvalColors = (approvalStateRes.result as { colors: string[] }).colors;
+      let approvalColors: string[] = [];
+      for (let attempt = 0; attempt < 10; attempt++) {
+        await new Promise((r) => setTimeout(r, 100));
+        harness.sendJsonl({ id: 500 + attempt, op: 'dshState' });
+        const res = await harness.waitForMessage((m) => m.id === 500 + attempt);
+        approvalColors = (res.result as { colors: string[] }).colors;
+        if (approvalColors[1] === '#ff6d00') break;
+      }
       expect(approvalColors[1]).toBe('#ff6d00'); // F1 is NEEDS_INPUT amber
       expect(approvalColors[57]).toBe('#00ff4c'); // Enter is highlighted green for ACCEPT
       expect(approvalColors[0]).toBe('#ff0033'); // Esc is highlighted red for REJECT
 
       // 5. Simulate physical Return/Enter key (macOS virtual keyCode 36) in Swift 6 daemon
-      harness.sendJsonl({ id: 202, op: 'dshKey', keyCode: 36 });
-      const keyRes = await harness.waitForMessage((m) => m.id === 202);
+      harness.sendJsonl({ id: 700, op: 'dshKey', keyCode: 36 });
+      const keyRes = await harness.waitForMessage((m) => m.id === 700);
       expect(keyRes.ok).toBe(true);
       expect((keyRes.result as { handled: boolean }).handled).toBe(true);
 
@@ -387,10 +391,14 @@ describe('Swift 6 Native S4 Daemon (DshDaemon.swift) Cross-Verification', () => 
 
       // 7. Emit DSH turn/end -> COMPLETED and verify Swift 6 daemon updates F1 to #00ff4c
       ctx.emit('session/event', { id: 'dsh-live-1' }, { type: 'turn/end' });
-      await new Promise((r) => setTimeout(r, 200));
-      harness.sendJsonl({ id: 203, op: 'dshState' });
-      const completedStateRes = await harness.waitForMessage((m) => m.id === 203);
-      const completedColors = (completedStateRes.result as { colors: string[] }).colors;
+      let completedColors: string[] = [];
+      for (let attempt = 0; attempt < 10; attempt++) {
+        await new Promise((r) => setTimeout(r, 100));
+        harness.sendJsonl({ id: 800 + attempt, op: 'dshState' });
+        const res = await harness.waitForMessage((m) => m.id === 800 + attempt);
+        completedColors = (res.result as { colors: string[] }).colors;
+        if (completedColors[1] === '#00ff4c') break;
+      }
       expect(completedColors[1]).toBe('#00ff4c'); // F1 is COMPLETED green
       expect(completedColors[57]).toBe('#000000'); // Enter decision key is extinguished
     } finally {

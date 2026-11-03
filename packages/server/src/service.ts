@@ -11,6 +11,7 @@ import {
 } from '@dsh-hid/protocol';
 import { SessionRouter } from './router.js';
 import { PeripheralWsServer, type PeripheralRpcHandler } from './ws-server.js';
+import { DaemonManager } from './daemon-manager.js';
 import {
   ApprovalArbiter,
   type ApprovalOutcome,
@@ -29,12 +30,28 @@ export interface PeripheralServerConfig {
    * client is currently connected (useful for in-process unit testing).
    */
   forceArbitration?: boolean;
+  /**
+   * Automatically start and manage the hardware daemon process alongside the Cordis plugin.
+   * Defaults to true in live runtime; defaults to false in unit testing (Vitest).
+   */
+  autoStartDaemon?: boolean;
+  /**
+   * Optional custom path to the daemon binary or CLI script.
+   */
+  daemonPath?: string;
+  /**
+   * Optional custom CLI arguments for the daemon.
+   */
+  daemonArgs?: string[];
 }
 
 export interface DshSessionSummary {
   readonly id?: string;
   readonly sessionId?: string;
   readonly running?: boolean;
+  readonly formatStatus?: string;
+  readonly blank?: boolean;
+  readonly agentAvailable?: boolean;
 }
 
 export interface DshSessionRef {
@@ -89,8 +106,10 @@ export class PeripheralServerService extends Service {
   public readonly router: SessionRouter;
   public readonly wsServer: PeripheralWsServer;
   public readonly arbiter: ApprovalArbiter;
+  public readonly daemonManager: DaemonManager;
   private readonly autoBindSlots: boolean;
   private readonly forceArbitration: boolean;
+  private readonly autoStartDaemon: boolean;
 
   constructor(ctx: Context, config?: PeripheralServerConfig) {
     super(ctx, 'peripheralServer');
@@ -99,14 +118,32 @@ export class PeripheralServerService extends Service {
     this.forceArbitration = config?.forceArbitration ?? false;
     this.router = new SessionRouter({ totalSlots: config?.totalSlots });
 
+    const host = config?.host ?? DEFAULT_HOST;
+    const port = config?.port ?? DEFAULT_PORT;
+    const wsPath = config?.path ?? DEFAULT_PATH;
+    const wsUrl = `ws://${host}:${port}${wsPath}`;
+
+    this.daemonManager = new DaemonManager({
+      wsUrl,
+      daemonPath: config?.daemonPath,
+      daemonArgs: config?.daemonArgs,
+    });
+
+    const isVitest = typeof process !== 'undefined' && (process.env.VITEST === 'true' || process.env.NODE_ENV === 'test');
+    this.autoStartDaemon = config?.autoStartDaemon ?? (!isVitest);
+
     const rpcHandler: PeripheralRpcHandler = {
       getInitialSnapshot: () => this.router.getSnapshot(),
       onSwitchFocus: async (slotIndex: number) => {
+        const wasAlreadyFocused = this.router.getFocusedSlot() === slotIndex;
         const ok = this.router.switchFocus(slotIndex);
         if (!ok) {
           throw new Error(`Failed to switch focus: invalid slot ${slotIndex}`);
         }
         const currentSlot = this.router.getSlot(slotIndex);
+        if (wasAlreadyFocused && currentSlot?.sessionId) {
+          this.wsServer.broadcastFocusChanged(slotIndex, currentSlot.sessionId);
+        }
         this.ctx.emit('peripheral/focus-switched', slotIndex, currentSlot?.sessionId ?? null);
         return { success: true, focusedSlot: slotIndex };
       },
@@ -228,13 +265,26 @@ export class PeripheralServerService extends Service {
     this.ctx.on('api-session/added', (summary: DshSessionSummary) => {
       const sessionId = summary.sessionId ?? summary.id;
       if (!sessionId || !this.autoBindSlots) return;
+      const isRealDshSummary =
+        'formatStatus' in summary || 'blank' in summary || 'agentAvailable' in summary;
+      // In real DSH, merely clicking/browsing an old conversation emits `api-session/added` with `running: false`.
+      // Only allocate a slot if the session is actually running (preserve standalone test behavior when !isRealDshSummary).
+      if (isRealDshSummary && !summary.running) {
+        return;
+      }
       const initialStatus = summary.running
         ? AgentPeripheralStatus.RUNNING
         : AgentPeripheralStatus.IDLE;
       const existing = this.router.getSlotBySessionId(sessionId);
       if (!existing) {
-        this.router.allocateSlot(sessionId, initialStatus);
-      } else if (summary.running !== undefined) {
+        const allocated = this.router.allocateSlot(sessionId, initialStatus);
+        if (summary.running) {
+          this.router.switchFocus(allocated.slotIndex);
+        }
+      } else if (summary.running) {
+        this.router.updateSlot(existing.slotIndex, { status: AgentPeripheralStatus.RUNNING });
+        this.router.switchFocus(existing.slotIndex);
+      } else if (!isRealDshSummary && summary.running !== undefined) {
         this.router.updateSlot(existing.slotIndex, { status: initialStatus });
       }
     });
@@ -245,14 +295,32 @@ export class PeripheralServerService extends Service {
 
     this.ctx.on('api-session/status', (sessionId: string, running: boolean) => {
       const current = this.router.getSlotBySessionId(sessionId);
-      // Do not overwrite NEEDS_INPUT while waiting for approval
-      if (current?.status === AgentPeripheralStatus.NEEDS_INPUT && running) {
-        return;
+      if (running) {
+        // Do not overwrite NEEDS_INPUT while waiting for approval
+        if (current?.status === AgentPeripheralStatus.NEEDS_INPUT) {
+          return;
+        }
+        this.ensureAndUpdateSession(sessionId, {
+          status: AgentPeripheralStatus.RUNNING,
+        });
+        const slot = this.router.getSlotBySessionId(sessionId);
+        if (slot) {
+          this.router.switchFocus(slot.slotIndex);
+        }
+      } else {
+        // Do not allocate a slot when a browsed/inactive session reports running=false,
+        // and preserve COMPLETED / ERROR status after a turn ends.
+        if (!current) return;
+        const nextStatus =
+          current.status === AgentPeripheralStatus.ERROR
+            ? AgentPeripheralStatus.ERROR
+            : AgentPeripheralStatus.COMPLETED;
+        this.router.updateSlot(current.slotIndex, {
+          status: nextStatus,
+          activeTool: undefined,
+          question: undefined,
+        });
       }
-      this.ensureAndUpdateSession(sessionId, {
-        status: running ? AgentPeripheralStatus.RUNNING : AgentPeripheralStatus.IDLE,
-        ...(running ? {} : { activeTool: undefined, question: undefined }),
-      });
     });
 
     this.ctx.on('api-session/error', (sessionId: string, _message: string) => {
@@ -264,6 +332,9 @@ export class PeripheralServerService extends Service {
 
     // --- B. Real DSH `session/*` events (`@deepseek-ai/dsh-session`) ---
     this.ctx.on('session/created', (session: DshSessionRef | string) => {
+      // In real DSH, `session` is an object and `session/created` fires whenever cold history is read
+      // or a blank session is pre-warmed. Only allocate immediately for legacy string session IDs in tests.
+      if (typeof session !== 'string') return;
       const sessionId = extractSessionId(session);
       if (sessionId && this.autoBindSlots) {
         this.router.allocateSlot(sessionId, AgentPeripheralStatus.IDLE);
@@ -282,11 +353,16 @@ export class PeripheralServerService extends Service {
       if (!sessionId || !event?.type) return;
 
       switch (event.type) {
-        case 'turn/start':
+        case 'turn/start': {
           this.ensureAndUpdateSession(sessionId, {
             status: AgentPeripheralStatus.RUNNING,
           });
+          const slot = this.router.getSlotBySessionId(sessionId);
+          if (slot) {
+            this.router.switchFocus(slot.slotIndex);
+          }
           break;
+        }
         case 'turn/end': {
           const reason = typeof event.data?.reason === 'string' ? event.data.reason : undefined;
           const nextStatus =
@@ -311,7 +387,7 @@ export class PeripheralServerService extends Service {
           break;
         }
         case 'tool/result':
-          this.ensureAndUpdateSession(sessionId, {
+          this.router.updateSlotBySessionId(sessionId, {
             activeTool: undefined,
           });
           break;
@@ -324,12 +400,11 @@ export class PeripheralServerService extends Service {
     this.ctx.on(
       'agent/created',
       (payloadOrId: string | { agent: DshAgentRef; source?: string; signal?: AbortSignal }) => {
-        const sessionId =
-          typeof payloadOrId === 'string'
-            ? payloadOrId
-            : extractSessionId(payloadOrId?.agent);
-        if (sessionId && this.autoBindSlots) {
-          this.router.allocateSlot(sessionId, AgentPeripheralStatus.IDLE);
+        // In real DSH, `agent/created` is emitted with `{ agent, source: 'resume' | 'create' }`
+        // whenever a conversation is clicked/viewed in the UI. Only allocate for legacy string IDs in tests.
+        if (typeof payloadOrId !== 'string') return;
+        if (payloadOrId && this.autoBindSlots) {
+          this.router.allocateSlot(payloadOrId, AgentPeripheralStatus.IDLE);
         }
       }
     );
@@ -353,15 +428,32 @@ export class PeripheralServerService extends Service {
         payloadOrId: string | { agent: DshAgentRef; status: string | AgentPeripheralStatus },
         legacyStatus?: string | AgentPeripheralStatus
       ) => {
-        const sessionId =
-          typeof payloadOrId === 'string'
-            ? payloadOrId
-            : extractSessionId(payloadOrId?.agent);
-        const rawStatus =
-          typeof payloadOrId === 'string' ? legacyStatus : payloadOrId?.status;
+        const isLegacyString = typeof payloadOrId === 'string';
+        const sessionId = isLegacyString
+          ? payloadOrId
+          : extractSessionId(payloadOrId?.agent);
+        const rawStatus = isLegacyString ? legacyStatus : payloadOrId?.status;
         if (!sessionId || !rawStatus) return;
 
         const peripheralStatus = this.mapAgentStatus(rawStatus);
+        if (!isLegacyString && peripheralStatus === AgentPeripheralStatus.IDLE) {
+          const current = this.router.getSlotBySessionId(sessionId);
+          if (!current) return;
+          if (
+            current.status === AgentPeripheralStatus.COMPLETED ||
+            current.status === AgentPeripheralStatus.ERROR
+          ) {
+            return;
+          }
+        }
+        if (!isLegacyString && peripheralStatus === AgentPeripheralStatus.RUNNING) {
+          this.ensureAndUpdateSession(sessionId, { status: AgentPeripheralStatus.RUNNING });
+          const slot = this.router.getSlotBySessionId(sessionId);
+          if (slot) {
+            this.router.switchFocus(slot.slotIndex);
+          }
+          return;
+        }
         this.router.updateSlotBySessionId(sessionId, { status: peripheralStatus });
       }
     );
@@ -464,10 +556,13 @@ export class PeripheralServerService extends Service {
   }
 
   /**
-   * Starts the peripheral server.
+   * Starts the peripheral server and optionally the hardware daemon process.
    */
   public async start(): Promise<void> {
     await this.wsServer.start();
+    if (this.autoStartDaemon) {
+      void this.daemonManager.start();
+    }
   }
 
   protected async [Service.init](): Promise<void> {
@@ -475,9 +570,10 @@ export class PeripheralServerService extends Service {
   }
 
   /**
-   * Stops the peripheral server and terminates active client connections.
+   * Stops the peripheral server and terminates active client connections and daemon process.
    */
   public async stop(): Promise<void> {
+    await this.daemonManager.stop();
     await this.wsServer.close();
   }
 }

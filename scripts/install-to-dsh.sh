@@ -36,6 +36,13 @@ if [ -x "$DSH_BIN" ]; then
   "$DSH_BIN" plugin --profile desktop add "$SERVER_TGZ"
   # Install into web profile (used by dsh web / CLI)
   "$DSH_BIN" plugin --profile web add "$SERVER_TGZ"
+
+  # Sync fresh server files directly into profiles to avoid pnpm tarball cache
+  rm -rf "$HOME/.dsh/profiles/desktop/node_modules/dsh-plugin-peripheral-server"
+  cp -r "$REPO_ROOT/packages/server" "$HOME/.dsh/profiles/desktop/node_modules/dsh-plugin-peripheral-server"
+  rm -rf "$HOME/.dsh/profiles/web/node_modules/dsh-plugin-peripheral-server"
+  cp -r "$REPO_ROOT/packages/server" "$HOME/.dsh/profiles/web/node_modules/dsh-plugin-peripheral-server"
+
   echo "==> Successfully installed into DeepSeek Harness profiles!"
 else
   echo "Warning: DeepSeek Harness binary not found at $DSH_BIN"
