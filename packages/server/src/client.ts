@@ -293,6 +293,125 @@ if (win?.__ModuleLoader__) {
             });
           }
 
+          function handleKeyDown(event: KeyboardEvent): void {
+            if (event.metaKey || event.ctrlKey || event.altKey) return;
+
+            // 1. F1..F12 physical/virtual keys
+            const fMatch = /^F([1-9]|1[0-2])$/.exec(event.key);
+            if (fMatch) {
+              const targetSlot = parseInt(fMatch[1], 10);
+              event.preventDefault();
+              event.stopPropagation();
+              const snapshot = store.get();
+              const slot = snapshot.slots.find((s) => s.slotIndex === targetSlot);
+              if (slot?.sessionId) {
+                navigateToSession(slot.sessionId);
+              }
+              if (ws && ws.readyState === WebSocket.OPEN) {
+                try {
+                  ws.send(
+                    JSON.stringify({
+                      jsonrpc: '2.0',
+                      id: Date.now(),
+                      method: 'peripheral/switchFocus',
+                      params: { slotIndex: targetSlot },
+                    })
+                  );
+                } catch {
+                  // ignore
+                }
+              }
+              return;
+            }
+
+            // 2. Decision keys when active slot is in NEEDS_INPUT
+            const targetEl = event.target as HTMLElement | null;
+            const targetTagName = targetEl?.tagName?.toLowerCase();
+            const isInputTarget =
+              targetTagName === 'input' ||
+              targetTagName === 'textarea' ||
+              targetEl?.isContentEditable === true;
+
+            const snapshot = store.get();
+            const currentSlot = snapshot.slots.find((s) => s.slotIndex === snapshot.focusedSlot);
+            if (!isInputTarget && currentSlot?.status === 'NEEDS_INPUT') {
+              if (event.key === 'Enter' || event.key === 'y' || event.key === 'Y' || event.key === '1') {
+                event.preventDefault();
+                event.stopPropagation();
+                if (ws && ws.readyState === WebSocket.OPEN) {
+                  try {
+                    ws.send(
+                      JSON.stringify({
+                        jsonrpc: '2.0',
+                        id: Date.now(),
+                        method: 'peripheral/selectOption',
+                        params: { slotIndex: snapshot.focusedSlot, optionIndex: 0, action: 'ACCEPT' },
+                      })
+                    );
+                  } catch {}
+                }
+              } else if (event.key === 'Escape' || event.key === 'n' || event.key === 'N' || event.key === '2') {
+                event.preventDefault();
+                event.stopPropagation();
+                if (ws && ws.readyState === WebSocket.OPEN) {
+                  try {
+                    ws.send(
+                      JSON.stringify({
+                        jsonrpc: '2.0',
+                        id: Date.now(),
+                        method: 'peripheral/selectOption',
+                        params: { slotIndex: snapshot.focusedSlot, optionIndex: 1, action: 'REJECT' },
+                      })
+                    );
+                  } catch {}
+                }
+              } else if (event.key === '3') {
+                event.preventDefault();
+                event.stopPropagation();
+                if (ws && ws.readyState === WebSocket.OPEN) {
+                  try {
+                    ws.send(
+                      JSON.stringify({
+                        jsonrpc: '2.0',
+                        id: Date.now(),
+                        method: 'peripheral/selectOption',
+                        params: { slotIndex: snapshot.focusedSlot, optionIndex: 2, action: 'ALWAYS_ALLOW' },
+                      })
+                    );
+                  } catch {}
+                }
+              }
+            }
+          }
+
+          if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
+            window.addEventListener('keydown', handleKeyDown, true);
+            disposers.push(() => {
+              if (typeof window.removeEventListener === 'function') {
+                window.removeEventListener('keydown', handleKeyDown, true);
+              }
+            });
+          }
+
+          if (ctx.remote && typeof ctx.remote.$on === 'function') {
+            try {
+              const disposeRemoteFocus = ctx.remote.$on(
+                'peripheral/focus-switched',
+                (slotIndex: number, sessionId: string | null) => {
+                  store.patch({ focusedSlot: slotIndex });
+                  if (sessionId) {
+                    navigateToSession(sessionId);
+                  }
+                }
+              );
+              if (typeof disposeRemoteFocus === 'function') {
+                disposers.push(disposeRemoteFocus);
+              }
+            } catch {
+              // ignore
+            }
+          }
+
           function statusLabel(status: string): string {
             const key = `status.${status}`;
             const label = t(key);

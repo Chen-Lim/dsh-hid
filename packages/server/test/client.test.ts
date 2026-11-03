@@ -9,8 +9,19 @@ describe('DSH Client Companion Plugin (client.ts)', () => {
   beforeEach(() => {
     originalWindow = globalThis.window;
     mockModuleLoader = { load: vi.fn() };
+    const listeners: Record<string, ((e: any) => void)[]> = {};
     (globalThis as any).window = {
       __ModuleLoader__: mockModuleLoader,
+      addEventListener: vi.fn((event: string, fn: any) => {
+        listeners[event] = listeners[event] || [];
+        listeners[event].push(fn);
+      }),
+      removeEventListener: vi.fn((event: string, fn: any) => {
+        if (listeners[event]) {
+          listeners[event] = listeners[event].filter((f) => f !== fn);
+        }
+      }),
+      _listeners: listeners,
     };
   });
 
@@ -152,6 +163,108 @@ describe('DSH Client Companion Plugin (client.ts)', () => {
     expect(registeredOptions).toContainEqual(
       expect.objectContaining({ name: 'main', key: 'peripheral' })
     );
+
+    if (typeof cleanup === 'function') cleanup();
+  });
+
+  it('handles physical/virtual keydown for F-keys and approval decisions', () => {
+    const clientJsPath = join(__dirname, '../dist/client.js');
+    const content = readFileSync(clientJsPath, 'utf8');
+
+    let capturedWs: any = null;
+    class MockWebSocket {
+      public static OPEN = 1;
+      public onopen: any;
+      public onmessage: any;
+      public onclose: any;
+      public onerror: any;
+      public readyState = 1;
+      public send = vi.fn();
+      public close = vi.fn();
+      constructor() {
+        capturedWs = this;
+      }
+    }
+    (globalThis as any).WebSocket = MockWebSocket;
+
+    const listeners = (globalThis as any).window._listeners;
+
+    const fn = new Function('window', 'WebSocket', content);
+    fn((globalThis as any).window, MockWebSocket);
+
+    const plugin = mockModuleLoader.load.mock.calls[0][0].factory();
+    const openSessionSpy = vi.fn();
+    const mockUiWorkspace = {
+      openSession: openSessionSpy,
+    };
+    const ctx = { uiWorkspace: mockUiWorkspace };
+
+    const cleanup = plugin.apply(ctx);
+
+    // Initial snapshot: Slot 1 is NEEDS_INPUT with session 'session-f1'
+    capturedWs.onmessage({
+      data: JSON.stringify({
+        method: 'peripheral/snapshot',
+        params: {
+          focusedSlot: 1,
+          slots: [
+            { slotIndex: 1, sessionId: 'session-f1', status: 'NEEDS_INPUT' },
+            { slotIndex: 2, sessionId: 'session-f2', status: 'IDLE' },
+          ],
+        },
+      }),
+    });
+
+    const keydownListener = listeners['keydown']?.[0];
+    expect(keydownListener).toBeDefined();
+
+    // 1. Press F2 -> switches focus to slot 2 and navigates to session-f2
+    const f2Event = {
+      key: 'F2',
+      preventDefault: vi.fn(),
+      stopPropagation: vi.fn(),
+    };
+    keydownListener(f2Event);
+    expect(f2Event.preventDefault).toHaveBeenCalled();
+    expect(openSessionSpy).toHaveBeenCalledWith('session-f2');
+    const f2Sent = JSON.parse(capturedWs.send.mock.calls.at(-1)[0]);
+    expect(f2Sent.method).toBe('peripheral/switchFocus');
+    expect(f2Sent.params.slotIndex).toBe(2);
+
+    // Switch focus back to Slot 1 (NEEDS_INPUT)
+    capturedWs.onmessage({
+      data: JSON.stringify({
+        method: 'peripheral/focusChanged',
+        params: { focusedSlot: 1, sessionId: 'session-f1' },
+      }),
+    });
+
+    // 2. Press Enter -> triggers ACCEPT option decision
+    const enterEvent = {
+      key: 'Enter',
+      target: {},
+      preventDefault: vi.fn(),
+      stopPropagation: vi.fn(),
+    };
+    keydownListener(enterEvent);
+    expect(enterEvent.preventDefault).toHaveBeenCalled();
+    const enterSent = JSON.parse(capturedWs.send.mock.calls.at(-1)[0]);
+    expect(enterSent.method).toBe('peripheral/selectOption');
+    expect(enterSent.params.action).toBe('ACCEPT');
+    expect(enterSent.params.slotIndex).toBe(1);
+
+    // 3. Press Escape -> triggers REJECT option decision
+    const escEvent = {
+      key: 'Escape',
+      target: {},
+      preventDefault: vi.fn(),
+      stopPropagation: vi.fn(),
+    };
+    keydownListener(escEvent);
+    expect(escEvent.preventDefault).toHaveBeenCalled();
+    const escSent = JSON.parse(capturedWs.send.mock.calls.at(-1)[0]);
+    expect(escSent.method).toBe('peripheral/selectOption');
+    expect(escSent.params.action).toBe('REJECT');
 
     if (typeof cleanup === 'function') cleanup();
   });
