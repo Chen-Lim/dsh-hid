@@ -81,6 +81,34 @@ describe('PeripheralServerService (Cordis integration)', () => {
     expect(service.router.getSlot(1)?.status).toBe(AgentPeripheralStatus.INACTIVE);
   });
 
+  it('resets COMPLETED status to IDLE when switching focus to a slot', async () => {
+    ctx.emit('agent/created', 'session-done');
+    service.router.updateSlot(1, { status: AgentPeripheralStatus.COMPLETED });
+    expect(service.router.getSlot(1)?.status).toBe(AgentPeripheralStatus.COMPLETED);
+
+    // Call onSwitchFocus via wsServer handler
+    const handler = (service.wsServer as any).handler;
+    await handler.onSwitchFocus(1);
+
+    expect(service.router.getSlot(1)?.status).toBe(AgentPeripheralStatus.IDLE);
+    expect(service.router.getFocusedSlot()).toBe(1);
+
+    // Further api-session/status(false) must not revert IDLE back to COMPLETED
+    ctx.emit('api-session/status', 'session-done', false);
+    expect(service.router.getSlot(1)?.status).toBe(AgentPeripheralStatus.IDLE);
+  });
+
+  it('resets COMPLETED status to IDLE when session is opened from UI', async () => {
+    ctx.emit('agent/created', 'session-ui-open');
+    service.router.updateSlot(1, { status: AgentPeripheralStatus.COMPLETED });
+    expect(service.router.getSlot(1)?.status).toBe(AgentPeripheralStatus.COMPLETED);
+
+    const handler = (service.wsServer as any).handler;
+    await handler.onSessionOpened('session-ui-open');
+
+    expect(service.router.getSlot(1)?.status).toBe(AgentPeripheralStatus.IDLE);
+  });
+
   it('stops server cleanly when context is disposed', async () => {
     const stopSpy = vi.spyOn(service, 'stop');
     await ctx.emit('dispose');

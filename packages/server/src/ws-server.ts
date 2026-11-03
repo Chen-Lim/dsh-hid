@@ -44,6 +44,7 @@ export interface PeripheralRpcHandler {
     action: OptionAction
   ): Promise<{ success: boolean; slotIndex: number }>;
   onAbort?(slotIndex: number): Promise<{ success: boolean; slotIndex: number }>;
+  onSessionOpened?(sessionId: string): Promise<{ success: boolean; slotIndex?: number }>;
   getInitialSnapshot?(): SnapshotParams;
 }
 
@@ -270,6 +271,24 @@ export class PeripheralWsServer {
           }
           const result = await this.handler.onAbort(slotIndex);
           this.sendToClient(client, createJsonRpcSuccessResponse(id, result));
+          break;
+        }
+
+        case 'peripheral/sessionOpened': {
+          const sessionId = p.sessionId as string;
+          if (!sessionId) {
+            this.sendToClient(
+              client,
+              createJsonRpcErrorResponse(id, RPC_INVALID_PARAMS, 'Missing required param: sessionId')
+            );
+            break;
+          }
+          if (this.handler?.onSessionOpened) {
+            const result = await this.handler.onSessionOpened(sessionId);
+            this.sendToClient(client, createJsonRpcSuccessResponse(id, result));
+          } else {
+            this.sendToClient(client, createJsonRpcSuccessResponse(id, { success: true }));
+          }
           break;
         }
 

@@ -135,17 +135,40 @@ export class PeripheralServerService extends Service {
     const rpcHandler: PeripheralRpcHandler = {
       getInitialSnapshot: () => this.router.getSnapshot(),
       onSwitchFocus: async (slotIndex: number) => {
+        let currentSlot = this.router.getSlot(slotIndex);
+        if (currentSlot?.status === AgentPeripheralStatus.COMPLETED) {
+          currentSlot =
+            this.router.updateSlot(slotIndex, { status: AgentPeripheralStatus.IDLE }) ?? currentSlot;
+        }
         const wasAlreadyFocused = this.router.getFocusedSlot() === slotIndex;
         const ok = this.router.switchFocus(slotIndex);
         if (!ok) {
           throw new Error(`Failed to switch focus: invalid slot ${slotIndex}`);
         }
-        const currentSlot = this.router.getSlot(slotIndex);
         if (wasAlreadyFocused && currentSlot?.sessionId) {
           this.wsServer.broadcastFocusChanged(slotIndex, currentSlot.sessionId);
         }
         this.ctx.emit('peripheral/focus-switched', slotIndex, currentSlot?.sessionId ?? null);
+        this.bringWindowToFront();
         return { success: true, focusedSlot: slotIndex };
+      },
+      onSessionOpened: async (sessionId: string) => {
+        const slot = this.router.getSlotBySessionId(sessionId);
+        if (slot) {
+          let updated = slot;
+          if (slot.status === AgentPeripheralStatus.COMPLETED) {
+            updated =
+              this.router.updateSlot(slot.slotIndex, { status: AgentPeripheralStatus.IDLE }) ?? slot;
+          }
+          const wasAlreadyFocused = this.router.getFocusedSlot() === slot.slotIndex;
+          this.router.switchFocus(slot.slotIndex);
+          if (wasAlreadyFocused && updated.sessionId) {
+            this.wsServer.broadcastFocusChanged(slot.slotIndex, updated.sessionId);
+          }
+          this.ctx.emit('peripheral/focus-switched', slot.slotIndex, updated.sessionId ?? null);
+          return { success: true, slotIndex: slot.slotIndex };
+        }
+        return { success: true };
       },
       onSetBrainpower: async (
         slotIndex: number,
@@ -309,8 +332,8 @@ export class PeripheralServerService extends Service {
         }
       } else {
         // Do not allocate a slot when a browsed/inactive session reports running=false,
-        // and preserve COMPLETED / ERROR status after a turn ends.
-        if (!current) return;
+        // and do not overwrite IDLE status back to COMPLETED once reviewed.
+        if (!current || current.status === AgentPeripheralStatus.IDLE) return;
         const nextStatus =
           current.status === AgentPeripheralStatus.ERROR
             ? AgentPeripheralStatus.ERROR
@@ -552,6 +575,19 @@ export class PeripheralServerService extends Service {
         return AgentPeripheralStatus.ERROR;
       default:
         return AgentPeripheralStatus.IDLE;
+    }
+  }
+
+  /**
+   * Activates the DeepSeek Harness macOS desktop application window.
+   */
+  public bringWindowToFront(): void {
+    if (typeof process !== 'undefined' && process.platform === 'darwin') {
+      import('node:child_process')
+        .then(({ execFile }) => {
+          execFile('/usr/bin/osascript', ['-e', 'tell application "DeepSeek Harness" to activate'], () => {});
+        })
+        .catch(() => {});
     }
   }
 
