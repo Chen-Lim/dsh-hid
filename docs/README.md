@@ -14,6 +14,7 @@
 | **通讯协议** | [`docs/spec/protocol.md`](./spec/protocol.md) | WebSocket JSON-RPC 2.0 契约、VIA 32-Byte Raw HID 与 Nuphy 64-Byte 协议。 |
 | **插件技术规范** | [`docs/spec/plugin-cordis.md`](./spec/plugin-cordis.md) | Cordis 服务端插件接口、DSH 核心事件监听、生命周期与侧边栏扩展规划。 |
 | **侧栏常驻改造** | [`docs/spec/sidebar-resident-ui.md`](./spec/sidebar-resident-ui.md) | 客户端半打包、`sidebar.panellist` / `main` 槽位、Host 状态通道、审批边界与验收清单。 |
+| **国际化框架** | [`docs/spec/i18n.md`](./spec/i18n.md) | 语言资源、翻译内核、`ctx.locale` 适配层、文案键规范与后续接入步骤。 |
 | **排期与里程碑** | [`docs/timeline.md`](./timeline.md) | 研发排期时间线、Milestone 1~4 交付清单与 LTS 演进规划（Rust 核心重构）。 |
 
 ---
