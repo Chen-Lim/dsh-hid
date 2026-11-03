@@ -17,6 +17,7 @@ import {
   NOTIFICATION_SLOT_UPDATED,
   NOTIFICATION_FOCUS_CHANGED,
   NOTIFICATION_SERVER_SHUTTING_DOWN,
+  NOTIFICATION_TRANSPORT_CHANGED,
   METHOD_SWITCH_FOCUS,
   METHOD_SET_BRAINPOWER,
   METHOD_SELECT_OPTION,
@@ -201,12 +202,14 @@ describe('Swift 6 Native S4 Daemon (DshDaemon.swift) Cross-Verification', () => 
       serverWs = ws;
       ws.on('message', (raw) => {
         const parsed = JSON.parse(raw.toString()) as {
-          id: number;
+          id?: number;
           method: string;
           params: Record<string, unknown>;
         };
         receivedRpcCalls.push({ method: parsed.method, params: parsed.params });
-        ws.send(JSON.stringify(createJsonRpcSuccessResponse(parsed.id, { ok: true })));
+        if (typeof parsed.id === 'number') {
+          ws.send(JSON.stringify(createJsonRpcSuccessResponse(parsed.id, { ok: true })));
+        }
       });
 
       const initialSlots: SlotInfo[] = [
@@ -276,6 +279,19 @@ describe('Swift 6 Native S4 Daemon (DshDaemon.swift) Cross-Verification', () => 
       harness.sendJsonl({ id: 14, op: 'dshSendRpc', rpc: 'abort', slotIndex: 1 });
       await harness.waitForMessage((m) => m.id === 14 && m.ok === true);
 
+      harness.sendJsonl({
+        id: 15,
+        op: 'dshSendRpc',
+        rpc: 'transportChanged',
+        transport: 'bluetooth',
+        model: 'NuPhy Air75 V3',
+        rgb: false,
+        keys: true,
+        ledBlink: true,
+        wireless: true,
+      });
+      await harness.waitForMessage((m) => m.id === 15 && m.ok === true);
+
       // Wait for all 4 RPC responses to be acknowledged
       await harness.waitForMessage((m) => m.event === 'dshRpcResponse' && m.id === 4);
 
@@ -295,6 +311,19 @@ describe('Swift 6 Native S4 Daemon (DshDaemon.swift) Cross-Verification', () => 
         {
           method: METHOD_ABORT,
           params: { slotIndex: 1 },
+        },
+        {
+          method: NOTIFICATION_TRANSPORT_CHANGED,
+          params: {
+            transport: 'bluetooth',
+            model: 'NuPhy Air75 V3',
+            capabilities: {
+              rgb: false,
+              keys: true,
+              ledBlink: true,
+              wireless: true,
+            },
+          },
         },
       ]);
 

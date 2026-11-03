@@ -11,6 +11,33 @@ import ApplicationServices
 import Darwin
 import IOKit.hidsystem
 
+struct NuphyDeviceProfile: Sendable, Equatable {
+    let model: String
+    let wiredPID: Int
+    let donglePID: Int
+    let reportSize: Int
+
+    static let supported: [NuphyDeviceProfile] = [
+        NuphyDeviceProfile(model: "Air75 V3 ANSI", wiredPID: 0x1028, donglePID: 0x2620, reportSize: 64),
+        NuphyDeviceProfile(model: "Air65 V3 ANSI", wiredPID: 0x102b, donglePID: 0x2621, reportSize: 64),
+        NuphyDeviceProfile(model: "Air96 V3 ANSI", wiredPID: 0x1029, donglePID: 0x2622, reportSize: 64),
+    ]
+
+    static let allowedProductIDs: Set<Int> = Set(supported.flatMap { [$0.wiredPID, $0.donglePID] })
+
+    static func resolve(productID: Int) -> (profile: NuphyDeviceProfile, transport: String, isDongle: Bool)? {
+        for profile in supported {
+            if profile.wiredPID == productID {
+                return (profile, "USB", false)
+            }
+            if profile.donglePID == productID {
+                return (profile, "2.4G", true)
+            }
+        }
+        return nil
+    }
+}
+
 // Bluetooth exposes ordinary keyboard/consumer reports, not the S4 RGB pipe.
 // Enumeration does not open HID. Temporary OS key translation is managed by
 // KeyAdaptation, separately from the keyboard's firmware/keymap and RGB pipe.
@@ -21,7 +48,7 @@ final class BluetoothKeyboard {
               ["Bluetooth", "Bluetooth Low Energy"].contains(p["Transport"] as? String ?? ""),
               (p["Manufacturer"] as? String)?.lowercased() == "nuphy",
               let product = p["Product"] as? String else { return false }
-        return product.range(of: "^(NuPhy )?Air75 V3(-[123])?$", options: .regularExpression) != nil
+        return product.range(of: "^(NuPhy )?Air(65|75|96) V3(-[123])?$", options: .regularExpression) != nil
     }
     static func identities() -> [[String:Any]] {
         var found = [String:[String:Any]]()
@@ -43,6 +70,48 @@ final class BluetoothKeyboard {
         }
         return found.values.sorted { ($0["id"] as? String ?? "") < ($1["id"] as? String ?? "") }
     }
+    /// Best-effort standard HID Output Report control for Bluetooth keyboard LEDs (Bit 1 = CapsLock LED).
+    /// Fails closed and silently when macOS holds exclusive access to the HOGP keyboard service.
+    @discardableResult static func setCapsLockLED(on: Bool) -> Bool {
+        let manager = IOHIDManagerCreate(kCFAllocatorDefault, IOOptionBits(kIOHIDOptionsTypeNone))
+        IOHIDManagerSetDeviceMatching(manager, [kIOHIDPrimaryUsagePageKey: 1, kIOHIDPrimaryUsageKey: 6] as CFDictionary)
+        var succeeded = false
+        for device in IOHIDManagerCopyDevices(manager) as? Set<IOHIDDevice> ?? [] {
+            var properties = [String: Any]()
+            for key in ["VendorID", "ProductID", "Transport", "Manufacturer", "Product"] {
+                properties[key] = IOHIDDeviceGetProperty(device, key as CFString)
+            }
+            guard Self.matches(properties) else { continue }
+            let opened = IOHIDDeviceOpen(device, IOOptionBits(kIOHIDOptionsTypeNone))
+            let report: [UInt8] = [0x00, on ? 0x02 : 0x00]
+            let status = report.withUnsafeBufferPointer {
+                IOHIDDeviceSetReport(device, kIOHIDReportTypeOutput, CFIndex(0), $0.baseAddress!, report.count)
+            }
+            if status == kIOReturnSuccess {
+                succeeded = true
+            }
+            if opened == kIOReturnSuccess {
+                IOHIDDeviceClose(device, IOOptionBits(kIOHIDOptionsTypeNone))
+            }
+        }
+        return succeeded
+    }
+    /// Pure state-to-LED schedule helper for Bluetooth fallback indicator pulsing.
+    /// - NEEDS_INPUT: 1Hz pulse (500ms on, 500ms off)
+    /// - ERROR: 3 quick flashes (150ms on/off x 3 within first 900ms), then off
+    /// - RUNNING / IDLE / COMPLETED / INACTIVE: off (avoid interfering with typing)
+    static func shouldIlluminateCapsLockLED(status: DshAgentStatus, elapsedMs: Double) -> Bool {
+        let clamped = max(0.0, elapsedMs)
+        switch status {
+        case .needsInput:
+            return Int(clamped / 500.0) % 2 == 0
+        case .error:
+            guard clamped < 900.0 else { return false }
+            return Int(clamped / 150.0) % 2 == 0
+        case .inactive, .idle, .running, .completed:
+            return false
+        }
+    }
     func snapshot() -> [String:Any] {
         ["devices":Self.identities().map { ["id":$0["id"]!,"model":"Air75 V3","transport":"bluetooth"] }]
     }
@@ -57,10 +126,12 @@ final class KeyAdaptation {
         let locations=Set(BluetoothKeyboard.identities().compactMap{$0["locationId"] as? UInt32}.filter{$0 != 0})
         return (IOHIDEventSystemClientCopyServices(client) as? [IOHIDServiceClient] ?? []).filter {
             let transport=IOHIDServiceClientCopyProperty($0,"Transport" as CFString) as? String ?? ""
-            if transport == "USB" {return number($0,"VendorID") == 0x19f5 && number($0,"ProductID") == 0x1028}
+            if transport == "USB" {
+                return number($0,"VendorID") == 0x19f5 && NuphyDeviceProfile.allowedProductIDs.contains(Int(number($0,"ProductID")))
+            }
             let product=IOHIDServiceClientCopyProperty($0,"Product" as CFString) as? String ?? ""
             return ["Bluetooth","Bluetooth Low Energy"].contains(transport) && number($0,"VendorID")==2007 && number($0,"ProductID")==0 &&
-                product.range(of:"^(NuPhy )?Air75 V3(-[123])?$",options:.regularExpression) != nil &&
+                product.range(of:"^(NuPhy )?Air(65|75|96) V3(-[123])?$",options:.regularExpression) != nil &&
                 locations.contains(UInt32(truncatingIfNeeded:number($0,"LocationID")))
         }
     }
@@ -560,7 +631,7 @@ struct LightingJournals: Sendable {
     func read(_ url: URL, serial: String) throws -> LightingBackup {
         do {
             let record = try JSONDecoder().decode(LightingBackup.self, from: Data(contentsOf: url))
-            guard record.schema == 1, record.vendorID == 0x19f5, record.productID == 0x1028,
+            guard record.schema == 1, record.vendorID == 0x19f5, NuphyDeviceProfile.allowedProductIDs.contains(record.productID),
                   S4.readableState(record.state, firmware: record.firmware), record.renderedColors.count == 312,
                   record.customColors == nil || record.customColors?.count == 252,
                   (record.lightingProfile ?? 0) <= 1 else {
@@ -631,6 +702,7 @@ final class Air75Device {
     private var manager: IOHIDManager?
     private var lockFD: Int32 = -1
     private var device: IOHIDDevice?
+    private var candidateDevices = [IOHIDDevice]()
     private var inputBuffer = UnsafeMutablePointer<UInt8>.allocate(capacity: 64)
     private var replies = [[UInt8]]()
     private var removed = false
@@ -645,8 +717,13 @@ final class Air75Device {
     private var protocolReady = false
     // In-process self-tests can exercise the complete session lifecycle without
     // opening IOKit. No JSON command or environment variable enables this seam.
+    private let testProductId: Int
     private let testExchange: (([UInt8]) throws -> [UInt8])?
     private var testConnected = false
+    private(set) var productId: Int = 0x1028
+    private(set) var modelName: String = "Air75 V3 ANSI"
+    private(set) var transportMode: String = "USB"
+    private(set) var isDongle: Bool = false
     private(set) var firmware = [UInt8]()
     private(set) var ledCount = 0
     private(set) var armed = false
@@ -656,9 +733,16 @@ final class Air75Device {
     var deferredProfiles: [UInt8] { journals.profiles.filter { $0 != lightingProfile } }
     var hasPendingBackups: Bool { recoveryPending || !deferredProfiles.isEmpty }
 
-    init(backupURL: URL, testExchange: (([UInt8]) throws -> [UInt8])? = nil) {
+    init(backupURL: URL, testProductId: Int = 0x1028, testExchange: (([UInt8]) throws -> [UInt8])? = nil) {
         journals = LightingJournals(legacyURL: backupURL)
+        self.testProductId = testProductId
         self.testExchange = testExchange
+        if let resolved = NuphyDeviceProfile.resolve(productID: testProductId) {
+            self.productId = testProductId
+            self.modelName = resolved.profile.model
+            self.transportMode = resolved.transport
+            self.isDongle = resolved.isDongle
+        }
     }
     deinit { closeTransport(); inputBuffer.deallocate() }
 
@@ -676,43 +760,28 @@ final class Air75Device {
         (IOHIDDeviceGetProperty(device, name as CFString) as? NSNumber)?.intValue
     }
     private func requireConnected() throws {
-        guard connected else { throw failure("NOT_CONNECTED", "Connect the Air75 V3 by USB first.") }
+        guard connected else { throw failure("NOT_CONNECTED", "Connect the Air75 V3 by USB or 2.4G receiver first.") }
     }
-    private func openTransport() throws {
-        closeTransport()
-        if testExchange != nil { testConnected = true; serial = "self-test"; return }
-        lockFD = Darwin.open("/tmp/air75-studio-hid-\(getuid()).lock", O_CREAT | O_RDWR | O_CLOEXEC | O_NOFOLLOW, S_IRUSR | S_IWUSR)
-        guard lockFD >= 0, flock(lockFD, LOCK_EX | LOCK_NB) == 0 else {
-            if lockFD >= 0 { Darwin.close(lockFD); lockFD = -1 }
-            throw failure("HID_IN_USE", "Another Air75 Studio helper already owns the keyboard connection.")
+    private func attachDevice(_ selected: IOHIDDevice) {
+        if let existing = device {
+            IOHIDDeviceRegisterInputReportCallback(existing, inputBuffer, 64, nil, nil)
+            IOHIDDeviceRegisterRemovalCallback(existing, nil, nil)
         }
-        let m = IOHIDManagerCreate(kCFAllocatorDefault, IOOptionBits(kIOHIDOptionsTypeNone))
-        manager = m
-        let match: [String: Any] = [kIOHIDVendorIDKey: 0x19f5, kIOHIDProductIDKey: 0x1028, kIOHIDTransportKey:"USB",
-                                   kIOHIDPrimaryUsagePageKey: 1, kIOHIDPrimaryUsageKey: 0]
-        IOHIDManagerSetDeviceMatching(m, match as CFDictionary)
-        IOHIDManagerScheduleWithRunLoop(m, CFRunLoopGetCurrent(), CFRunLoopMode.defaultMode.rawValue)
-        let opened = IOHIDManagerOpen(m, IOOptionBits(kIOHIDOptionsTypeNone))
-        guard opened == kIOReturnSuccess else {
-            closeTransport()
-            throw failure("HID_PERMISSION", "Cannot open the vendor HID interface (\(String(format: "0x%08x", opened))). Check Input Monitoring and close NuPhyIO.")
+        replies.removeAll(keepingCapacity: true)
+        device = selected
+        removed = false
+        let pid = propertyInt(selected, kIOHIDProductIDKey) ?? 0x1028
+        if let resolved = NuphyDeviceProfile.resolve(productID: pid) {
+            productId = pid
+            modelName = resolved.profile.model
+            transportMode = resolved.transport
+            isDongle = resolved.isDongle
+        } else {
+            productId = pid
+            modelName = "Air75 V3 ANSI"
+            transportMode = "USB"
+            isDongle = false
         }
-        guard let all = IOHIDManagerCopyDevices(m) as? Set<IOHIDDevice> else {
-            closeTransport(); throw failure("DEVICE_NOT_FOUND", "等待 Air75 V3 ANSI：请连接数据线，并将键盘切到有线模式。")
-        }
-        let matches = all.filter {
-            propertyInt($0, kIOHIDVendorIDKey) == 0x19f5 && propertyInt($0, kIOHIDProductIDKey) == 0x1028 &&
-            propertyInt($0, kIOHIDPrimaryUsagePageKey) == 1 && propertyInt($0, kIOHIDPrimaryUsageKey) == 0 &&
-            propertyInt($0, kIOHIDMaxInputReportSizeKey) == 64 && propertyInt($0, kIOHIDMaxOutputReportSizeKey) == 64
-        }
-        guard !matches.isEmpty else {
-            closeTransport(); throw failure("DEVICE_NOT_FOUND", "等待 Air75 V3 ANSI：请连接数据线，并将键盘切到有线模式。")
-        }
-        guard matches.count == 1, let selected = matches.first else {
-            closeTransport()
-            throw failure("DEVICE_AMBIGUOUS", "检测到多把 Air75 V3，请仅连接要使用的一把。")
-        }
-        device = selected; removed = false
         serial = IOHIDDeviceGetProperty(selected, kIOHIDSerialNumberKey as CFString) as? String ?? ""
         let context = Unmanaged.passUnretained(self).toOpaque()
         IOHIDDeviceRegisterInputReportCallback(selected, inputBuffer, 64, { context, result, _, _, reportID, report, count in
@@ -725,6 +794,70 @@ final class Air75Device {
         }, context)
         pump(0.02)
     }
+    private func openTransport() throws {
+        closeTransport()
+        if testExchange != nil {
+            testConnected = true
+            serial = "self-test"
+            if let resolved = NuphyDeviceProfile.resolve(productID: testProductId) {
+                productId = testProductId
+                modelName = resolved.profile.model
+                transportMode = resolved.transport
+                isDongle = resolved.isDongle
+            }
+            return
+        }
+        lockFD = Darwin.open("/tmp/air75-studio-hid-\(getuid()).lock", O_CREAT | O_RDWR | O_CLOEXEC | O_NOFOLLOW, S_IRUSR | S_IWUSR)
+        guard lockFD >= 0, flock(lockFD, LOCK_EX | LOCK_NB) == 0 else {
+            if lockFD >= 0 { Darwin.close(lockFD); lockFD = -1 }
+            throw failure("HID_IN_USE", "Another Air75 Studio helper already owns the keyboard connection.")
+        }
+        let m = IOHIDManagerCreate(kCFAllocatorDefault, IOOptionBits(kIOHIDOptionsTypeNone))
+        manager = m
+        let match: [String: Any] = [kIOHIDVendorIDKey: 0x19f5, kIOHIDTransportKey: "USB",
+                                   kIOHIDPrimaryUsagePageKey: 1, kIOHIDPrimaryUsageKey: 0]
+        IOHIDManagerSetDeviceMatching(m, match as CFDictionary)
+        IOHIDManagerScheduleWithRunLoop(m, CFRunLoopGetCurrent(), CFRunLoopMode.defaultMode.rawValue)
+        let opened = IOHIDManagerOpen(m, IOOptionBits(kIOHIDOptionsTypeNone))
+        guard opened == kIOReturnSuccess else {
+            closeTransport()
+            throw failure("HID_PERMISSION", "Cannot open the vendor HID interface (\(String(format: "0x%08x", opened))). Check Input Monitoring and close NuPhyIO.")
+        }
+        guard let all = IOHIDManagerCopyDevices(m) as? Set<IOHIDDevice> else {
+            closeTransport(); throw failure("DEVICE_NOT_FOUND", "等待 Air75 V3：请连接 USB 数据线或插入 2.4G 接收器。")
+        }
+        let matches = all.filter {
+            guard propertyInt($0, kIOHIDVendorIDKey) == 0x19f5,
+                  let pid = propertyInt($0, kIOHIDProductIDKey),
+                  let resolved = NuphyDeviceProfile.resolve(productID: pid) else { return false }
+            return propertyInt($0, kIOHIDPrimaryUsagePageKey) == 1 &&
+                   propertyInt($0, kIOHIDPrimaryUsageKey) == 0 &&
+                   propertyInt($0, kIOHIDMaxInputReportSizeKey) == resolved.profile.reportSize &&
+                   propertyInt($0, kIOHIDMaxOutputReportSizeKey) == resolved.profile.reportSize
+        }
+        guard !matches.isEmpty else {
+            closeTransport(); throw failure("DEVICE_NOT_FOUND", "等待 Air75 V3：请连接 USB 数据线或插入 2.4G 接收器。")
+        }
+        let wiredMatches = matches.filter {
+            guard let pid = propertyInt($0, kIOHIDProductIDKey) else { return false }
+            return NuphyDeviceProfile.resolve(productID: pid)?.isDongle == false
+        }
+        let dongleMatches = matches.filter {
+            guard let pid = propertyInt($0, kIOHIDProductIDKey) else { return false }
+            return NuphyDeviceProfile.resolve(productID: pid)?.isDongle == true
+        }
+        guard wiredMatches.count <= 1 && dongleMatches.count <= 1 else {
+            closeTransport()
+            throw failure("DEVICE_AMBIGUOUS", "检测到多把 Air75 V3，请仅连接要使用的一把。")
+        }
+        let orderedCandidates = Array(wiredMatches) + Array(dongleMatches)
+        guard let selected = orderedCandidates.first else {
+            closeTransport()
+            throw failure("DEVICE_NOT_FOUND", "等待 Air75 V3：请连接 USB 数据线或插入 2.4G 接收器。")
+        }
+        candidateDevices = orderedCandidates
+        attachDevice(selected)
+    }
     private func closeTransport() {
         if let d = device {
             IOHIDDeviceRegisterInputReportCallback(d, inputBuffer, 64, nil, nil)
@@ -734,14 +867,14 @@ final class Air75Device {
             IOHIDManagerUnscheduleFromRunLoop(m, CFRunLoopGetCurrent(), CFRunLoopMode.defaultMode.rawValue)
             IOHIDManagerClose(m, IOOptionBits(kIOHIDOptionsTypeNone))
         }
-        device = nil; manager = nil; replies.removeAll(); removed = false; armed = false; lastRGBWriteAt = nil; protocolReady = false
+        device = nil; candidateDevices.removeAll(); manager = nil; replies.removeAll(); removed = false; armed = false; lastRGBWriteAt = nil; protocolReady = false
         testConnected = false
         if lockFD >= 0 { flock(lockFD, LOCK_UN); Darwin.close(lockFD); lockFD = -1 }
     }
-    private func exchange(_ frame: [UInt8], timeout: TimeInterval = 0.65) throws -> [UInt8] {
+    private func exchangeOnce(_ frame: [UInt8], timeout: TimeInterval) throws -> [UInt8] {
         try requireConnected()
         if let testExchange = testExchange { return try testExchange(frame) }
-        guard let d = device else { throw failure("NOT_CONNECTED", "Connect the Air75 V3 by USB first.") }
+        guard let d = device else { throw failure("NOT_CONNECTED", "Connect the Air75 V3 by USB or 2.4G receiver first.") }
         // Flush already delivered reports. Never resend an uncertain write or
         // send undocumented opcodes to unstick a desynchronized session.
         pump(0.001)
@@ -750,7 +883,7 @@ final class Air75Device {
             IOHIDDeviceSetReport(d, kIOHIDReportTypeOutput, CFIndex(0), $0.baseAddress!, 64)
         }
         guard sent == kIOReturnSuccess else {
-            throw failure("HID_WRITE_FAILED", "HID output failed (\(String(format: "0x%08x", sent))); reconnect the cable and close other lighting apps.")
+            throw failure("HID_WRITE_FAILED", "HID output failed (\(String(format: "0x%08x", sent))); reconnect the cable or 2.4G receiver and close other lighting apps.")
         }
         let deadline = ProcessInfo.processInfo.systemUptime + timeout
         while ProcessInfo.processInfo.systemUptime < deadline {
@@ -765,6 +898,27 @@ final class Air75Device {
             _ = CFRunLoopRunInMode(.defaultMode, 0.002, true)
         }
         throw failure("HID_TIMEOUT", "No valid \(String(format: "%02X", frame[1])) response. Stop other HID clients and reconnect; no blind write retry was performed.")
+    }
+    private func exchange(_ frame: [UInt8], timeout: TimeInterval = 0.65) throws -> [UInt8] {
+        do {
+            return try exchangeOnce(frame, timeout: timeout)
+        } catch let error as BridgeError where error.code == "HID_TIMEOUT" && isDongle {
+            // In 2.4G wireless mode, the keyboard RF frontend sleeps after idle periods while
+            // the USB dongle remains enumerated. Send a read-only 0xA1 wake-up preamble frame,
+            // wait 200ms for RF wake-up, and retry the request once.
+            if let wakeFrame = try? S4.frame(command: 0xa1, length: 8, key: 0) {
+                if let testExchange = testExchange {
+                    _ = try? testExchange(wakeFrame)
+                } else if let d = device {
+                    _ = wakeFrame.withUnsafeBufferPointer {
+                        IOHIDDeviceSetReport(d, kIOHIDReportTypeOutput, CFIndex(0), $0.baseAddress!, 64)
+                    }
+                    pump(0.20)
+                    replies.removeAll(keepingCapacity: true)
+                }
+            }
+            return try exchangeOnce(frame, timeout: timeout)
+        }
     }
     private func request(_ command: UInt8, length: Int, address: Int = 0, payload: [UInt8] = []) throws -> [UInt8] {
         let handle = [UInt8(0xd5),0xd6,0xd8].contains(command) ? lightingProfile : 0
@@ -828,7 +982,17 @@ final class Air75Device {
         }
         // A separate configurator may have changed the in-RAM session key.
         // Refresh it using read-only A1 rather than mutating the key with EE.
-        do { try identify() } catch { closeTransport(); throw error }
+        do {
+            try identify()
+        } catch {
+            if testExchange == nil, candidateDevices.count > 1, let fallback = candidateDevices.dropFirst().first {
+                attachDevice(fallback)
+                do { try identify() } catch { closeTransport(); throw error }
+            } else {
+                closeTransport()
+                throw error
+            }
+        }
         let state = try readState()
         _ = try readRGB() // Validate the complete D2 route before allowing writes.
         protocolReady = true
@@ -839,7 +1003,7 @@ final class Air75Device {
         if hasFunctionKeyBackup { _ = try restoreFunctionKey() }
         return ["connected": true, "firmware": firmware, "firmwareHex": firmware.map { String(format: "%02x", $0) }.joined(separator: " "),
                 "firmwareVersion": S4.firmwareVersion(firmware), "ledCount": ledCount,
-                "model": "Air75 V3 ANSI", "vendorId": 0x19f5, "productId": 0x1028, "transport": "USB",
+                "model": modelName, "vendorId": 0x19f5, "productId": productId, "transport": transportMode,
                 "keyLedCount": 84, "sideLedCount": 20, "sideIndependent": false, "originalState": state,
                 "state": state, "lightingProfile": lightingProfile, "armed": armed, "needsRestore": recoveryPending, "recoveryPending": recoveryPending, "deferredProfiles": deferredProfiles, "backupPath": backupURL.path,
                 "capabilities": capabilities]
@@ -847,7 +1011,10 @@ final class Air75Device {
     private var capabilities: [String: Any] {
         ["perKey": protocolReady && S4.supportsPerKey(firmware), "sideWholeZone": protocolReady,
          "sidePixels": false, "protocol": "air75-s4", "stateBytes": S4.stateLength(firmware) ?? 0,
-         "readProbeVerified": protocolReady]
+         "readProbeVerified": protocolReady,
+         "lighting": protocolReady && S4.supportsPerKey(firmware),
+         "keymap": protocolReady,
+         "wireless": isDongle]
     }
     func status() throws -> [String: Any] {
         var state: [UInt8]?
@@ -860,6 +1027,10 @@ final class Air75Device {
             result["state"] = state
             result["lightingProfile"] = lightingProfile
             result["firmwareVersion"] = S4.firmwareVersion(firmware)
+            result["model"] = modelName
+            result["vendorId"] = 0x19f5
+            result["productId"] = productId
+            result["transport"] = transportMode
             result["capabilities"] = capabilities
         }
         return result
@@ -1015,7 +1186,7 @@ final class Air75Device {
         guard capturedProfile == lightingProfile else {
             throw failure("LIGHTING_PROFILE_CHANGED", "键盘档位已改变，请重新播放灯效。")
         }
-        let record = LightingBackup(createdAt: ISO8601DateFormatter().string(from: Date()), serial: serial,
+        let record = LightingBackup(createdAt: ISO8601DateFormatter().string(from: Date()), productID: productId, serial: serial,
                                     firmware: firmware, state: state, renderedColors: colors, lightingProfile: lightingProfile)
         do {
             try FileManager.default.createDirectory(at: backupURL.deletingLastPathComponent(), withIntermediateDirectories: true,
@@ -1878,6 +2049,41 @@ final class DshJsonRpcSession {
         ])
     }
 
+    func buildTransportChangedNotification(
+        transport: String,
+        model: String? = nil,
+        vendorId: Int? = nil,
+        productId: Int? = nil,
+        rgb: Bool,
+        keys: Bool,
+        ledBlink: Bool,
+        wireless: Bool
+    ) throws -> String {
+        let normalized = transport.lowercased()
+        guard ["usb", "2.4g", "bluetooth", "disconnected"].contains(normalized) else {
+            throw failure("INVALID_TRANSPORT", "transport must be usb, 2.4g, bluetooth, or disconnected.")
+        }
+        var params: [String: Any] = [
+            "transport": normalized,
+            "capabilities": [
+                "rgb": rgb,
+                "keys": keys,
+                "ledBlink": ledBlink,
+                "wireless": wireless
+            ]
+        ]
+        if let model = model { params["model"] = model }
+        if let vendorId = vendorId { params["vendorId"] = vendorId }
+        if let productId = productId { params["productId"] = productId }
+        let payload: [String: Any] = [
+            "jsonrpc": "2.0",
+            "method": "peripheral/transportChanged",
+            "params": params
+        ]
+        let data = try JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys, .withoutEscapingSlashes])
+        return String(decoding: data, as: UTF8.self)
+    }
+
     /// Maps a physical macOS virtual keyCode to a JSON-RPC 2.0 request according to the focused slot state.
     func handlePhysicalKeyCode(_ keyCode: Int) throws -> String? {
         // 1. F1..F12 always switches focus to the corresponding slot (1..12)
@@ -1953,6 +2159,8 @@ final class DshWebSocketDaemon: @unchecked Sendable {
     private var keyTapSource: CFRunLoopSource?
     private var permissionRetryTimer: DispatchSourceTimer?
     private var lastAdaptedSlots = [Int]()
+    private var lastReportedTransport = ""
+    private var btLedIlluminated = false
     private var currentDelayMs: Double = 500.0
     private let initialDelayMs: Double = 500.0
     private let maxDelayMs: Double = 5000.0
@@ -2000,6 +2208,10 @@ final class DshWebSocketDaemon: @unchecked Sendable {
 
     func stop() {
         running = false
+        if btLedIlluminated {
+            btLedIlluminated = false
+            BluetoothKeyboard.setCapsLockLED(on: false)
+        }
         stopGlobalKeyTap()
         permissionRetryTimer?.cancel()
         permissionRetryTimer = nil
@@ -2095,16 +2307,57 @@ final class DshWebSocketDaemon: @unchecked Sendable {
         timer.setEventHandler { [weak self] in
             guard let self = self,
                   self.running,
-                  !self.hardwareMockMode,
-                  self.rpcSession.hasActiveSlots,
-                  self.rpcSession.shouldPulseFocusedSlot else { return }
+                  !self.hardwareMockMode else { return }
             let nowMs = ProcessInfo.processInfo.systemUptime * 1000.0
             if self.server.device.connected && self.server.device.armed {
+                guard self.rpcSession.hasActiveSlots, self.rpcSession.shouldPulseFocusedSlot else { return }
                 _ = try? self.rpcSession.syncToDevice(self.server.device, nowMs: nowMs, updateSide: false, verify: false, pulseFocused: true)
+            } else if self.lastReportedTransport == "bluetooth" {
+                self.syncBluetoothFallbackLED(nowMs: nowMs)
             }
         }
         timer.resume()
         self.frameTimer = timer
+    }
+
+    private func syncBluetoothFallbackLED(nowMs: Double) {
+        let focusedStatus = rpcSession.slotsByIndex[rpcSession.focusedSlot]?.status ?? .inactive
+        let elapsedMs = max(0.0, nowMs - rpcSession.focusSelectedAtMs)
+        let shouldIlluminate = BluetoothKeyboard.shouldIlluminateCapsLockLED(status: focusedStatus, elapsedMs: elapsedMs)
+        if shouldIlluminate != btLedIlluminated {
+            btLedIlluminated = shouldIlluminate
+            BluetoothKeyboard.setCapsLockLED(on: shouldIlluminate)
+        }
+    }
+
+    private func reportTransportIfChanged(
+        mode: String,
+        model: String?,
+        vendorId: Int?,
+        productId: Int?,
+        rgb: Bool,
+        keys: Bool,
+        ledBlink: Bool,
+        wireless: Bool
+    ) {
+        guard mode != lastReportedTransport else { return }
+        if lastReportedTransport == "bluetooth" && mode != "bluetooth" && btLedIlluminated {
+            btLedIlluminated = false
+            BluetoothKeyboard.setCapsLockLED(on: false)
+        }
+        lastReportedTransport = mode
+        if let json = try? rpcSession.buildTransportChangedNotification(
+            transport: mode,
+            model: model,
+            vendorId: vendorId,
+            productId: productId,
+            rgb: rgb,
+            keys: keys,
+            ledBlink: ledBlink,
+            wireless: wireless
+        ) {
+            sendRpcRequest(json)
+        }
     }
 
     private func renderToHardwareIfAvailable(nowMs: Double, updateSide: Bool) {
@@ -2116,6 +2369,28 @@ final class DshWebSocketDaemon: @unchecked Sendable {
                     if server.device.armed && server.device.recoveryPending {
                         _ = try? server.device.restore()
                     }
+                    reportTransportIfChanged(
+                        mode: server.device.transportMode.lowercased(),
+                        model: server.device.modelName,
+                        vendorId: 0x19f5,
+                        productId: server.device.productId,
+                        rgb: true,
+                        keys: true,
+                        ledBlink: false,
+                        wireless: server.device.isDongle
+                    )
+                } else if !BluetoothKeyboard.identities().isEmpty {
+                    reportTransportIfChanged(
+                        mode: "bluetooth",
+                        model: "Air75 V3",
+                        vendorId: 2007,
+                        productId: 0,
+                        rgb: false,
+                        keys: true,
+                        ledBlink: true,
+                        wireless: true
+                    )
+                    syncBluetoothFallbackLED(nowMs: nowMs)
                 }
                 return
             }
@@ -2126,9 +2401,43 @@ final class DshWebSocketDaemon: @unchecked Sendable {
                 verify: false,
                 pulseFocused: rpcSession.shouldPulseFocusedSlot
             )
+            reportTransportIfChanged(
+                mode: server.device.transportMode.lowercased(),
+                model: server.device.modelName,
+                vendorId: 0x19f5,
+                productId: server.device.productId,
+                rgb: true,
+                keys: true,
+                ledBlink: false,
+                wireless: server.device.isDongle
+            )
             syncActiveFunctionKeys()
         } catch let error as BridgeError where error.code == "DEVICE_NOT_FOUND" {
-            // Hardware not currently plugged in over USB; keep tracking state in memory.
+            // Hardware not currently plugged in over USB or 2.4G dongle; check Bluetooth fallback.
+            if !BluetoothKeyboard.identities().isEmpty {
+                reportTransportIfChanged(
+                    mode: "bluetooth",
+                    model: "Air75 V3",
+                    vendorId: 2007,
+                    productId: 0,
+                    rgb: false,
+                    keys: true,
+                    ledBlink: true,
+                    wireless: true
+                )
+                syncBluetoothFallbackLED(nowMs: nowMs)
+            } else {
+                reportTransportIfChanged(
+                    mode: "disconnected",
+                    model: nil,
+                    vendorId: nil,
+                    productId: nil,
+                    rgb: false,
+                    keys: false,
+                    ledBlink: false,
+                    wireless: false
+                )
+            }
         } catch {
             diagnostic("Hardware sync warning: \(error)")
         }
@@ -2417,6 +2726,23 @@ final class JSONServer {
             case "abort":
                 let slot = command["slotIndex"] as? Int
                 jsonString = try daemon.rpcSession.buildAbortRequest(slotIndex: slot)
+            case "transportChanged":
+                let transport = command["transport"] as? String ?? "2.4g"
+                let model = command["model"] as? String
+                let vendorId = command["vendorId"] as? Int
+                let productId = command["productId"] as? Int
+                let isBt = transport.lowercased() == "bluetooth"
+                let isDisconnected = transport.lowercased() == "disconnected"
+                jsonString = try daemon.rpcSession.buildTransportChangedNotification(
+                    transport: transport,
+                    model: model,
+                    vendorId: vendorId,
+                    productId: productId,
+                    rgb: !isBt && !isDisconnected,
+                    keys: !isDisconnected,
+                    ledBlink: isBt,
+                    wireless: transport.lowercased() != "usb" && !isDisconnected
+                )
             default:
                 throw failure("UNKNOWN_RPC", "Unknown dshSendRpc type: \(rpcType)")
             }
@@ -3143,6 +3469,59 @@ func testDshJsonRpcAndRenderingLifecycle(_ check: (Bool, String) throws -> Void)
     _ = try session.syncToDevice(device, nowMs: 1100.0, updateSide: false, verify: false, pulseFocused: true)
     try check(d8Packets == 1, "subsequent animated DSH frame sends only 1 delta D8 packet (<= 13 changed keys)")
     try check(device.shutdown(), "DSH virtual board restores original lighting cleanly on shutdown")
+
+    // 5. Wireless 2.4G Dongle wake-up retry & Bluetooth fallback transport tests
+    let dongleProfile = NuphyDeviceProfile.resolve(productID: 0x2620)
+    try check(dongleProfile?.transport == "2.4G" && dongleProfile?.isDongle == true && dongleProfile?.profile.model == "Air75 V3 ANSI", "0x2620 resolves to Air75 V3 2.4G Dongle profile")
+    try check(NuphyDeviceProfile.allowedProductIDs.contains(0x2620) && NuphyDeviceProfile.allowedProductIDs.contains(0x1028), "allowedProductIDs includes both wired and 2.4G dongle PIDs")
+
+    var dongleAsleep = true
+    var wakeupPreambleCount = 0
+    let dongleDevice = Air75Device(backupURL: dir.appendingPathComponent("dongle-backup.json"), testProductId: 0x2620, testExchange: { frame in
+        let cmd = frame[1], len = Int(frame[4])
+        if dongleAsleep {
+            // First command on sleeping 2.4G RF link times out; subsequent 0xa1 wake-up preamble wakes it
+            dongleAsleep = false
+            throw failure("HID_TIMEOUT", "Simulated 2.4G RF sleep timeout on command \(String(format: "0x%02x", cmd)).")
+        }
+        var payload = [UInt8]()
+        switch cmd {
+        case 0xa1:
+            wakeupPreambleCount += 1
+            payload = firmware
+        case 0xa0: payload = [0, 8, 4, 6, 16, 2, 0, 0]
+        case 0xd1: payload = [104]
+        case 0xd5: payload = boardState
+        default: payload = [UInt8](repeating: 0, count: max(len, 1))
+        }
+        var reply = [UInt8](repeating: 0, count: 64)
+        reply[0] = 0xaa; reply[1] = cmd
+        reply.replaceSubrange(4..<8, with: frame[4..<8])
+        reply.replaceSubrange(8..<(8 + len), with: payload.prefix(len))
+        reply[3] = S4.checksum(reply)
+        return reply
+    })
+    let dongleStatus = try dongleDevice.connect()
+    try check(dongleStatus["transport"] as? String == "2.4G" && dongleStatus["productId"] as? Int == 0x2620, "2.4G dongle connection reports transport=2.4G and productId=0x2620")
+    try check((dongleStatus["capabilities"] as? [String: Any])?["wireless"] as? Bool == true, "2.4G dongle reports capabilities.wireless=true")
+    try check(wakeupPreambleCount >= 2, "2.4G dongle automatically issues 0xa1 wake-up preamble and retries after RF sleep timeout")
+
+    try check(BluetoothKeyboard.shouldIlluminateCapsLockLED(status: .needsInput, elapsedMs: 100.0) == true, "Bluetooth fallback LED illuminates during first half of 1Hz NEEDS_INPUT cycle")
+    try check(BluetoothKeyboard.shouldIlluminateCapsLockLED(status: .needsInput, elapsedMs: 650.0) == false, "Bluetooth fallback LED extinguishes during second half of 1Hz NEEDS_INPUT cycle")
+    try check(BluetoothKeyboard.shouldIlluminateCapsLockLED(status: .error, elapsedMs: 50.0) == true && BluetoothKeyboard.shouldIlluminateCapsLockLED(status: .error, elapsedMs: 950.0) == false, "Bluetooth fallback LED flashes 3 times then stops on ERROR")
+    try check(BluetoothKeyboard.shouldIlluminateCapsLockLED(status: .running, elapsedMs: 100.0) == false, "Bluetooth fallback LED stays off on RUNNING")
+
+    let transportRpc = try session.buildTransportChangedNotification(
+        transport: "bluetooth",
+        model: "NuPhy Air75 V3",
+        vendorId: 0x05AC,
+        productId: 0x024F,
+        rgb: false,
+        keys: true,
+        ledBlink: true,
+        wireless: true
+    )
+    try check(transportRpc.contains("\"method\":\"peripheral/transportChanged\"") && transportRpc.contains("\"transport\":\"bluetooth\"") && transportRpc.contains("\"rgb\":false"), "buildTransportChangedNotification serializes Bluetooth fallback capabilities")
 }
 
 let arguments = Array(CommandLine.arguments.dropFirst())
