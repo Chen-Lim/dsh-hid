@@ -239,7 +239,8 @@ export class PeripheralServerService extends Service {
     });
 
     this.arbiter = new ApprovalArbiter(this.ctx, this.router, {
-      isPeripheralAvailable: () => this.forceArbitration || this.wsServer.getClientCount() > 0,
+      isPeripheralAvailable: () =>
+        this.forceArbitration || this.wsServer.getHardwareClientCount() > 0,
       autoBindSlots: this.autoBindSlots,
     });
 

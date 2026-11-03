@@ -60,6 +60,15 @@ interface ExtWebSocket extends WebSocket {
   isAlive: boolean;
 }
 
+/** In-page UI consumers advertise `?role=ui`; every other connection is a hardware daemon. */
+function isUiConnection(url: string | undefined): boolean {
+  if (!url) return false;
+  const queryIndex = url.indexOf('?');
+  if (queryIndex < 0) return false;
+  const params = new URLSearchParams(url.slice(queryIndex + 1));
+  return params.get('role') === 'ui';
+}
+
 /**
  * WebSocket server that exposes the JSON-RPC 2.0 peripheral bridge interface.
  */
@@ -73,6 +82,7 @@ export class PeripheralWsServer {
   private wss: WebSocketServer | null = null;
   private pingInterval: NodeJS.Timeout | null = null;
   private activeClients: Set<ExtWebSocket> = new Set();
+  private uiClients: Set<ExtWebSocket> = new Set();
   private started: boolean = false;
 
   constructor(options?: PeripheralWsServerOptions) {
@@ -113,8 +123,8 @@ export class PeripheralWsServer {
           }
         });
 
-        this.wss.on('connection', (ws: WebSocket) => {
-          this.handleConnection(ws as ExtWebSocket);
+        this.wss.on('connection', (ws: WebSocket, request) => {
+          this.handleConnection(ws as ExtWebSocket, request);
         });
       } catch (err) {
         reject(err);
@@ -122,9 +132,15 @@ export class PeripheralWsServer {
     });
   }
 
-  private handleConnection(client: ExtWebSocket): void {
+  private handleConnection(client: ExtWebSocket, request?: { url?: string }): void {
     client.isAlive = true;
     this.activeClients.add(client);
+
+    // In-page consumers connect with `?role=ui`; they must never be mistaken for a
+    // hardware daemon by ApprovalArbiter's availability check.
+    if (isUiConnection(request?.url)) {
+      this.uiClients.add(client);
+    }
 
     client.on('pong', () => {
       client.isAlive = true;
@@ -141,11 +157,13 @@ export class PeripheralWsServer {
 
     client.on('close', () => {
       this.activeClients.delete(client);
+      this.uiClients.delete(client);
     });
 
     client.on('error', (err) => {
       console.error('[PeripheralWsServer] Client socket error:', err);
       this.activeClients.delete(client);
+      this.uiClients.delete(client);
     });
 
     // Send initial snapshot on new client connection if available
@@ -377,6 +395,20 @@ export class PeripheralWsServer {
   }
 
   /**
+   * Returns the count of connected hardware daemons (UI_role connections excluded).
+   */
+  public getHardwareClientCount(): number {
+    return this.activeClients.size - this.uiClients.size;
+  }
+
+  /**
+   * Returns the count of connected in-page UI consumers.
+   */
+  public getUiClientCount(): number {
+    return this.uiClients.size;
+  }
+
+  /**
    * Returns whether the server is running.
    */
   public isRunning(): boolean {
@@ -423,6 +455,7 @@ export class PeripheralWsServer {
       }
     }
     this.activeClients.clear();
+    this.uiClients.clear();
 
     return new Promise((resolve) => {
       this.wss?.close(() => {

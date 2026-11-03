@@ -242,4 +242,26 @@ describe('PeripheralWsServer', () => {
     expect(notif2.method).toBe(NOTIFICATION_FOCUS_CHANGED);
     expect(notif2.params).toEqual({ focusedSlot: 2, sessionId: 'sess-2' });
   });
+
+  it('excludes role=ui connections from the hardware client count', async () => {
+    client = new TestClient(`ws://127.0.0.1:${server.getPort()}/peripheral/v1?role=ui`);
+    await client.waitForOpen();
+    await client.nextMessage();
+
+    expect(server.getClientCount()).toBe(1);
+    expect(server.getUiClientCount()).toBe(1);
+    expect(server.getHardwareClientCount()).toBe(0);
+
+    const daemon = new TestClient(`ws://127.0.0.1:${server.getPort()}/peripheral/v1`);
+    await daemon.waitForOpen();
+    await daemon.nextMessage();
+
+    expect(server.getUiClientCount()).toBe(1);
+    expect(server.getHardwareClientCount()).toBe(1);
+
+    daemon.close();
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(server.getHardwareClientCount()).toBe(0);
+    expect(server.getUiClientCount()).toBe(1);
+  });
 });
