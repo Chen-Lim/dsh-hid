@@ -101,6 +101,17 @@ export class PeripheralWsServer {
       return;
     }
 
+    if (process.platform === 'darwin' || process.platform === 'linux') {
+      try {
+        const { execSync } = await import('node:child_process');
+        execSync(`lsof -ti:${this.port} | grep -v "^${process.pid}$" | xargs kill -9 2>/dev/null || true`, {
+          stdio: 'ignore',
+        });
+      } catch {
+        // ignore
+      }
+    }
+
     return new Promise((resolve, reject) => {
       try {
         this.wss = new WebSocketServer({

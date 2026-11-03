@@ -43,6 +43,22 @@ if [ -x "$DSH_BIN" ]; then
   rm -rf "$HOME/.dsh/profiles/web/node_modules/dsh-plugin-peripheral-server"
   cp -r "$REPO_ROOT/packages/server" "$HOME/.dsh/profiles/web/node_modules/dsh-plugin-peripheral-server"
 
+  # Ensure cordis.patch.yml has the peripheral-server insert entry
+  for PROFILE in desktop web; do
+    PATCH_FILE="$HOME/.dsh/profiles/$PROFILE/cordis.patch.yml"
+    if [ -f "$PATCH_FILE" ] && ! grep -q "peripheral-server" "$PATCH_FILE"; then
+      cat << 'EOF' >> "$PATCH_FILE"
+- insert:
+    - id: peripheral-server
+      name: "dsh-plugin-peripheral-server"
+      config:
+        port: 45678
+        autoBindSlots: true
+        autoDaemon: true
+EOF
+    fi
+  done
+
   echo "==> Successfully installed into DeepSeek Harness profiles!"
 else
   echo "Warning: DeepSeek Harness binary not found at $DSH_BIN"
