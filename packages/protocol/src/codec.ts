@@ -11,6 +11,7 @@ import {
   NOTIFICATION_SLOT_UPDATED,
   NOTIFICATION_FOCUS_CHANGED,
   NOTIFICATION_SERVER_SHUTTING_DOWN,
+  NOTIFICATION_TRANSPORT_CHANGED,
   METHOD_SWITCH_FOCUS,
   METHOD_SET_BRAINPOWER,
   METHOD_SELECT_OPTION,
@@ -30,6 +31,8 @@ import type {
   SlotUpdatedNotification,
   FocusChangedNotification,
   ServerShuttingDownNotification,
+  TransportChangedNotification,
+  TransportChangedParams,
   SwitchFocusRequest,
   SetBrainpowerRequest,
   SelectOptionRequest,
@@ -230,8 +233,19 @@ export function createJsonRpcErrorResponse<TData = unknown>(
 export function createSnapshotNotification(
   focusedSlot: number,
   slots: SlotInfo[],
+  transportState?: TransportChangedParams,
 ): SnapshotNotification {
-  return createJsonRpcNotification(NOTIFICATION_SNAPSHOT, { focusedSlot, slots });
+  return createJsonRpcNotification(NOTIFICATION_SNAPSHOT, {
+    focusedSlot,
+    slots,
+    ...(transportState ? { transportState } : {}),
+  });
+}
+
+export function createTransportChangedNotification(
+  params: TransportChangedParams,
+): TransportChangedNotification {
+  return createJsonRpcNotification(NOTIFICATION_TRANSPORT_CHANGED, params);
 }
 
 export function createSlotUpdatedNotification(slot: SlotInfo): SlotUpdatedNotification {

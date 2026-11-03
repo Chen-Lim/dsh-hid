@@ -171,7 +171,61 @@ export function parseViaUplinkReport(report: Uint8Array): ViaUplinkEvent | null 
 /* ========================================================================== */
 
 export const NUPHY_VENDOR_ID = 0x19f5;
+export const NUPHY_BLUETOOTH_VENDOR_ID = 0x07d7; // 2007
+
+export const AIR75_V3_WIRED_PRODUCT_ID = 0x1028;
+export const AIR75_V3_DONGLE_PRODUCT_ID = 0x2620;
 export const AIR65_V3_PRODUCT_ID = 0x102b;
+export const AIR65_V3_WIRED_PRODUCT_ID = 0x102b;
+export const AIR65_V3_DONGLE_PRODUCT_ID = 0x2621;
+export const AIR96_V3_WIRED_PRODUCT_ID = 0x1029;
+export const AIR96_V3_DONGLE_PRODUCT_ID = 0x2622;
+
+export interface NuphyDeviceProfile {
+  readonly model: string;
+  readonly wiredProductId: number;
+  readonly dongleProductId: number;
+  readonly reportLength: number;
+}
+
+export const SUPPORTED_NUPHY_PROFILES: readonly NuphyDeviceProfile[] = Object.freeze([
+  {
+    model: 'Air75 V3 ANSI',
+    wiredProductId: AIR75_V3_WIRED_PRODUCT_ID,
+    dongleProductId: AIR75_V3_DONGLE_PRODUCT_ID,
+    reportLength: 64,
+  },
+  {
+    model: 'Air65 V3 ANSI',
+    wiredProductId: AIR65_V3_WIRED_PRODUCT_ID,
+    dongleProductId: AIR65_V3_DONGLE_PRODUCT_ID,
+    reportLength: 64,
+  },
+  {
+    model: 'Air96 V3 ANSI',
+    wiredProductId: AIR96_V3_WIRED_PRODUCT_ID,
+    dongleProductId: AIR96_V3_DONGLE_PRODUCT_ID,
+    reportLength: 64,
+  },
+]);
+
+/**
+ * Resolves a Nuphy device profile and transport mode from a USB Product ID.
+ */
+export function resolveNuphyProductProfile(productId: number): {
+  profile: NuphyDeviceProfile;
+  transport: 'usb' | '2.4g';
+} | null {
+  for (const profile of SUPPORTED_NUPHY_PROFILES) {
+    if (profile.wiredProductId === productId) {
+      return { profile, transport: 'usb' };
+    }
+    if (profile.dongleProductId === productId) {
+      return { profile, transport: '2.4g' };
+    }
+  }
+  return null;
+}
 
 export const NUPHY_REPORT_LENGTH = 64;
 export const NUPHY_PAYLOAD_LENGTH = 56;

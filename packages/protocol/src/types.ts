@@ -7,6 +7,7 @@ import type {
   NOTIFICATION_SLOT_UPDATED,
   NOTIFICATION_FOCUS_CHANGED,
   NOTIFICATION_SERVER_SHUTTING_DOWN,
+  NOTIFICATION_TRANSPORT_CHANGED,
   METHOD_SWITCH_FOCUS,
   METHOD_SET_BRAINPOWER,
   METHOD_SELECT_OPTION,
@@ -116,9 +117,36 @@ export type JsonRpcMessage =
 /*                     Server -> Client Notification Payloads                */
 /* ========================================================================== */
 
+/**
+ * Physical connection transport medium of the peripheral keyboard.
+ */
+export type PeripheralTransportMode = 'usb' | '2.4g' | 'bluetooth' | 'disconnected';
+
+/**
+ * Feature capabilities supported by the currently active transport mode.
+ */
+export interface PeripheralDeviceCapabilities {
+  rgb: boolean;
+  keys: boolean;
+  ledBlink: boolean;
+  wireless: boolean;
+}
+
+/**
+ * Payload reporting a change in peripheral connection transport or capability matrix.
+ */
+export interface TransportChangedParams {
+  transport: PeripheralTransportMode;
+  model?: string;
+  vendorId?: number;
+  productId?: number;
+  capabilities: PeripheralDeviceCapabilities;
+}
+
 export interface SnapshotParams {
   focusedSlot: number;
   slots: SlotInfo[];
+  transportState?: TransportChangedParams;
 }
 
 export type SlotUpdatedParams = SlotInfo;
@@ -152,11 +180,17 @@ export type ServerShuttingDownNotification = JsonRpcNotification<
   ServerShuttingDownParams
 >;
 
+export type TransportChangedNotification = JsonRpcNotification<
+  typeof NOTIFICATION_TRANSPORT_CHANGED,
+  TransportChangedParams
+>;
+
 export type ServerNotification =
   | SnapshotNotification
   | SlotUpdatedNotification
   | FocusChangedNotification
-  | ServerShuttingDownNotification;
+  | ServerShuttingDownNotification
+  | TransportChangedNotification;
 
 /* ========================================================================== */
 /*                     Client -> Server Request/Response Payloads             */

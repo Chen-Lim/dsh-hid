@@ -14,6 +14,16 @@ import {
   buildViaSetSlotLedReport,
   buildViaSetFocusReport,
   parseViaUplinkReport,
+  NUPHY_VENDOR_ID,
+  NUPHY_BLUETOOTH_VENDOR_ID,
+  AIR75_V3_WIRED_PRODUCT_ID,
+  AIR75_V3_DONGLE_PRODUCT_ID,
+  AIR65_V3_WIRED_PRODUCT_ID,
+  AIR65_V3_DONGLE_PRODUCT_ID,
+  AIR96_V3_WIRED_PRODUCT_ID,
+  AIR96_V3_DONGLE_PRODUCT_ID,
+  SUPPORTED_NUPHY_PROFILES,
+  resolveNuphyProductProfile,
   NUPHY_REPORT_LENGTH,
   NUPHY_PAYLOAD_LENGTH,
   NUPHY_HEADER_HOST,
@@ -61,6 +71,26 @@ describe('HID Constants & Mapping Tables', () => {
     expect(NUPHY_PRESET_GREEN_COMPLETION).toHaveLength(9);
     expect(NUPHY_PRESET_SIGNAL_OFF).toHaveLength(9);
     expect(NUPHY_PRESET_RED_ERROR).toHaveLength(9);
+  });
+
+  it('resolves wired and 2.4G dongle Nuphy product profiles', () => {
+    expect(NUPHY_VENDOR_ID).toBe(0x19f5);
+    expect(NUPHY_BLUETOOTH_VENDOR_ID).toBe(0x07d7);
+    expect(SUPPORTED_NUPHY_PROFILES).toHaveLength(3);
+
+    expect(resolveNuphyProductProfile(AIR75_V3_WIRED_PRODUCT_ID)).toEqual({
+      profile: expect.objectContaining({ model: 'Air75 V3 ANSI', wiredProductId: 0x1028 }),
+      transport: 'usb',
+    });
+    expect(resolveNuphyProductProfile(AIR75_V3_DONGLE_PRODUCT_ID)).toEqual({
+      profile: expect.objectContaining({ model: 'Air75 V3 ANSI', dongleProductId: 0x2620 }),
+      transport: '2.4g',
+    });
+    expect(resolveNuphyProductProfile(AIR65_V3_WIRED_PRODUCT_ID)?.transport).toBe('usb');
+    expect(resolveNuphyProductProfile(AIR65_V3_DONGLE_PRODUCT_ID)?.transport).toBe('2.4g');
+    expect(resolveNuphyProductProfile(AIR96_V3_WIRED_PRODUCT_ID)?.transport).toBe('usb');
+    expect(resolveNuphyProductProfile(AIR96_V3_DONGLE_PRODUCT_ID)?.transport).toBe('2.4g');
+    expect(resolveNuphyProductProfile(0xffff)).toBeNull();
   });
 });
 

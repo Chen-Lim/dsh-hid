@@ -20,12 +20,13 @@ export const MAX_SLOT_INDEX = 12;
 export const TOTAL_SLOTS = 12;
 
 /**
- * Server -> Daemon Notification Methods.
+ * Server -> Daemon / UI Notification Methods.
  */
 export const NOTIFICATION_SNAPSHOT = 'peripheral/snapshot';
 export const NOTIFICATION_SLOT_UPDATED = 'peripheral/slotUpdated';
 export const NOTIFICATION_FOCUS_CHANGED = 'peripheral/focusChanged';
 export const NOTIFICATION_SERVER_SHUTTING_DOWN = 'peripheral/serverShuttingDown';
+export const NOTIFICATION_TRANSPORT_CHANGED = 'peripheral/transportChanged';
 
 /**
  * Daemon -> Server Request Methods.

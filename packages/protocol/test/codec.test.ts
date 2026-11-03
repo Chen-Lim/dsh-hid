@@ -5,6 +5,7 @@ import {
   createSlotUpdatedNotification,
   createFocusChangedNotification,
   createServerShuttingDownNotification,
+  createTransportChangedNotification,
   createSwitchFocusRequest,
   createSetBrainpowerRequest,
   createSelectOptionRequest,
@@ -26,6 +27,7 @@ import {
   NOTIFICATION_SLOT_UPDATED,
   NOTIFICATION_FOCUS_CHANGED,
   NOTIFICATION_SERVER_SHUTTING_DOWN,
+  NOTIFICATION_TRANSPORT_CHANGED,
   METHOD_SWITCH_FOCUS,
   METHOD_SET_BRAINPOWER,
   METHOD_SELECT_OPTION,
@@ -100,7 +102,7 @@ describe('JSON-RPC Notification Builders & Roundtrip', () => {
     expect(parsed).toEqual(notif);
   });
 
-  it('creates focusChanged and serverShuttingDown notifications', () => {
+  it('creates focusChanged, serverShuttingDown, and transportChanged notifications', () => {
     const focusNotif = createFocusChangedNotification(2, 'sess-002');
     expect(focusNotif.method).toBe(NOTIFICATION_FOCUS_CHANGED);
     expect(focusNotif.params.focusedSlot).toBe(2);
@@ -108,6 +110,26 @@ describe('JSON-RPC Notification Builders & Roundtrip', () => {
     const shutdownNotif = createServerShuttingDownNotification('Host restart');
     expect(shutdownNotif.method).toBe(NOTIFICATION_SERVER_SHUTTING_DOWN);
     expect(shutdownNotif.params?.reason).toBe('Host restart');
+
+    const transportNotif = createTransportChangedNotification({
+      transport: '2.4g',
+      model: 'Air75 V3 ANSI',
+      vendorId: 0x19f5,
+      productId: 0x2620,
+      capabilities: {
+        rgb: true,
+        keys: true,
+        ledBlink: false,
+        wireless: true,
+      },
+    });
+    expect(transportNotif.method).toBe(NOTIFICATION_TRANSPORT_CHANGED);
+    expect(transportNotif.params.transport).toBe('2.4g');
+    expect(transportNotif.params.capabilities.wireless).toBe(true);
+
+    const parsed = parseJsonRpcMessage(serializeJsonRpcMessage(transportNotif));
+    expect(isJsonRpcNotification(parsed)).toBe(true);
+    expect(parsed).toEqual(transportNotif);
   });
 });
 
