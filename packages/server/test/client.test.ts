@@ -102,4 +102,57 @@ describe('DSH Client Companion Plugin (client.ts)', () => {
     if (typeof cleanup === 'function') cleanup();
     vi.useRealTimers();
   });
+
+  it('registers the resident sidebar entry and its main panel', () => {
+    const clientJsPath = join(__dirname, '../dist/client.js');
+    const content = readFileSync(clientJsPath, 'utf8');
+
+    class MockWebSocket {
+      public static OPEN = 1;
+      public onopen: any;
+      public onmessage: any;
+      public onclose: any;
+      public onerror: any;
+      public readyState = 1;
+      public send = vi.fn();
+      public close = vi.fn();
+    }
+    (globalThis as any).WebSocket = MockWebSocket;
+
+    const fn = new Function('window', 'WebSocket', content);
+    fn((globalThis as any).window, MockWebSocket);
+
+    const mockReact = {
+      createElement: vi.fn(() => null),
+      useState: vi.fn(() => [0, () => {}]),
+      useEffect: vi.fn(),
+    };
+    const plugin = mockModuleLoader.load.mock.calls[0][0].factory((name: string) =>
+      name === 'react' ? mockReact : undefined
+    );
+
+    const inject = vi.fn((_key: string, register: () => unknown) => {
+      register();
+      return () => {};
+    });
+    const register = vi.fn(() => () => {});
+    const ctx = {
+      uiWorkspace: { openSession: vi.fn() },
+      slots: { inject, register },
+    };
+
+    const cleanup = plugin.apply(ctx);
+
+    expect(inject).toHaveBeenCalledWith('sidebar.panellist', expect.any(Function));
+    expect(inject).toHaveBeenCalledWith('main', expect.any(Function));
+    const registeredOptions = register.mock.calls.map((call: any[]) => call[0]);
+    expect(registeredOptions).toContainEqual(
+      expect.objectContaining({ name: 'sidebar.panellist', id: 'peripheral' })
+    );
+    expect(registeredOptions).toContainEqual(
+      expect.objectContaining({ name: 'main', key: 'peripheral' })
+    );
+
+    if (typeof cleanup === 'function') cleanup();
+  });
 });
