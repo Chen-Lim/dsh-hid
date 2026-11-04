@@ -76,7 +76,7 @@ const TOTAL_SLOTS = 12;
 const STATUS_COLOR: Record<string, string> = {
   INACTIVE: 'var(--dsw-alias-state-idle-primary, #64748b)',
   IDLE: 'var(--dsw-alias-state-idle-primary, #94a3b8)',
-  RUNNING: 'var(--dsw-alias-brand-primary, #38bdf8)',
+  RUNNING: '#0284c7',
   NEEDS_INPUT: 'var(--dsw-alias-state-warn-primary, #f59e0b)',
   COMPLETED: 'var(--dsw-alias-state-success-primary, #10b981)',
   ERROR: 'var(--dsw-alias-state-error-primary, #ef4444)',
@@ -273,7 +273,7 @@ const AIR75_CSS = `
     background: #ffffff;
     padding: 30px;
     border-radius: 20px;
-    box-shadow: 0 20px 40px rgba(0,0,0,0.08);
+    box-shadow: 0 20px 40px rgba(0,0,0,0.08), 0 0 0 1px rgba(29,29,31,0.06);
     display: inline-block;
     user-select: none;
   }
@@ -1354,14 +1354,17 @@ if (win?.__ModuleLoader__) {
                       };
 
                       if (isFocused) {
-                        outerStyle.boxShadow =
-                          '0 0 0 2.5px var(--dsw-alias-brand-primary, #38bdf8), 0 4px 12px rgba(56, 189, 248, 0.45)';
-                        outerStyle.borderRadius = '6px';
+                        // A hairline ring in the slot accent, never a heavy brand
+                        // border: the reference keycap already has its own outline.
+                        outerStyle.boxShadow = `0 0 0 1.5px ${
+                          ledColor ?? 'rgba(29, 29, 31, 0.5)'
+                        }`;
+                        outerStyle.borderRadius = '7px';
                         outerStyle.transform = 'translateY(-1px)';
                         outerStyle.zIndex = 20;
                       } else if (isHovered) {
-                        outerStyle.boxShadow = '0 0 0 2px rgba(56, 189, 248, 0.6)';
-                        outerStyle.borderRadius = '6px';
+                        outerStyle.boxShadow = '0 0 0 1px rgba(29, 29, 31, 0.22)';
+                        outerStyle.borderRadius = '7px';
                         outerStyle.transform = 'translateY(-1px)';
                         outerStyle.zIndex = 15;
                       }

@@ -788,7 +788,7 @@ describe('DSH Client Companion Plugin (client.ts)', () => {
     const f1Cap = capParts('key-KC_F1');
     expect(f1Cap.bg.props.style.backgroundColor).toBe('#fff8eb');
     expect(f1Cap.box.children[1]?.props?.style?.color).toBe('#f59e0b');
-    expect(String(f1Cap.outer.props.style.boxShadow)).toContain('0 0 0 2.5px');
+    expect(String(f1Cap.outer.props.style.boxShadow)).toBe('0 0 0 1.5px #f59e0b');
 
     // Unassigned key keeps the reference white cap and ink wireframe.
     const qCap = capParts('key-KC_Q');
@@ -808,6 +808,11 @@ describe('DSH Client Companion Plugin (client.ts)', () => {
     const defaultCap = capParts('key-KC_F3');
     expect(defaultCap.bg.props.style.backgroundColor).toBe('#fbfbfd');
     expect(defaultCap.box.children[1] ?? null).toBeNull();
+
+    // RUNNING uses the same blue accent in the table/legend and on the keycap.
+    expect(
+      renderedElements.some((el) => el.props?.style?.background === '#0284c7')
+    ).toBe(true);
 
     // 12. Centering must not clip the left edge inside a narrow panel.
     const scrollRule = /\.air75-scroll-container \{([\s\S]*?)\}/.exec(css)?.[1] ?? '';
