@@ -104,6 +104,19 @@ pnpm typecheck
 
 ### 4.3 方式一：加载 Cordis 服务端插件 (Harness 内自启管理)
 
+#### 本地一键安装 / 更新至 DSH
+
+在开发或构建完成后，可使用自带脚本一键将插件发布并同步至本地 DeepSeek Harness（支持 Desktop 客户端与 Web profile）：
+
+```bash
+# 自动编译、打包并安装/更新至本地 DSH Profiles
+pnpm install:dsh
+# 或
+pnpm update:dsh
+```
+
+#### 在 Cordis 配置中装载
+
 在 DeepSeek Harness 的 Cordis 配置文件中声明或直接以代码方式装载。插件内置 `DaemonManager`，**默认在 Harness 启动时自动发现并托管拉起硬件守护进程**，并在应用退出时优雅释放硬件并恢复原生灯效：
 
 ```typescript
