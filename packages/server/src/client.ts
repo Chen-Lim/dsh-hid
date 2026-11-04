@@ -262,6 +262,9 @@ const AIR75_ACTION_THEMES = {
   },
 } as const satisfies Record<string, KeycapTheme>;
 
+const AIR75_BOARD_WIDTH = 959;
+const AIR75_BOARD_HEIGHT = 384;
+
 const AIR75_CSS = `
   .peripheral-page {
     display: flex;
@@ -325,21 +328,49 @@ const AIR75_CSS = `
     overflow-x: auto;
     text-align: center;
     padding: 6px 0;
+    box-sizing: border-box;
   }
   #stage.air75-stage {
     background: #ffffff;
     padding: 30px;
     border-radius: 20px;
     box-shadow: 0 20px 40px rgba(0,0,0,0.08), 0 0 0 1px rgba(29,29,31,0.06);
-    display: inline-block;
+    display: block;
+    width: 100%;
+    max-width: 1019px;
+    min-width: 300px;
+    margin: 0 auto;
+    box-sizing: border-box;
     user-select: none;
+  }
+  @media (max-width: 640px) {
+    #stage.air75-stage {
+      padding: 16px;
+      border-radius: 14px;
+    }
+  }
+  .air75-stage-viewport {
+    position: relative;
+    width: 100%;
+    max-width: 959px;
+    aspect-ratio: 959 / 384;
+    container-type: inline-size;
+    margin: 0 auto;
+    overflow: hidden;
   }
   #myKeyBoardBac {
     position: relative;
     width: 959px;
     height: 384px;
-    margin: 0 auto;
+    margin: 0;
+    transform-origin: top left;
+    transform: scale(var(--air75-scale, 1));
     user-select: none;
+  }
+  @supports (transform: scale(calc(100cqw / 959px))) {
+    #myKeyBoardBac {
+      transform: scale(var(--air75-scale, min(1, calc(100cqw / 959px))));
+    }
   }
   .kb-frame {
     position: absolute;
@@ -1236,6 +1267,46 @@ if (win?.__ModuleLoader__) {
               (s) => s.slotIndex === activeInspectSlot
             );
 
+            const [viewportNode, setViewportNode] = React.useState(null as HTMLElement | null);
+            React.useEffect(() => {
+              if (!viewportNode) return;
+              const applyScale = (width: number) => {
+                if (!(width > 0)) return;
+                const scale = Math.min(1, Math.max(0.25, width / AIR75_BOARD_WIDTH));
+                viewportNode.style?.setProperty?.('--air75-scale', scale.toFixed(4));
+                if (viewportNode.style) {
+                  viewportNode.style.height = `${Math.round(AIR75_BOARD_HEIGHT * scale * 100) / 100}px`;
+                }
+              };
+              applyScale(viewportNode.clientWidth);
+              const RO = (win as any)?.ResizeObserver ?? (globalThis as any)?.ResizeObserver;
+              let observer: any = null;
+              if (typeof RO === 'function') {
+                observer = new RO((entries: any[]) => {
+                  const entry = entries?.[0];
+                  const nextWidth =
+                    entry?.contentRect?.width ?? viewportNode.clientWidth ?? 0;
+                  applyScale(nextWidth);
+                });
+                observer.observe(viewportNode);
+              }
+              const onWindowResize = () => applyScale(viewportNode.clientWidth);
+              if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
+                window.addEventListener('resize', onWindowResize);
+              }
+              return () => {
+                if (observer && typeof observer.disconnect === 'function') {
+                  observer.disconnect();
+                }
+                if (
+                  typeof window !== 'undefined' &&
+                  typeof window.removeEventListener === 'function'
+                ) {
+                  window.removeEventListener('resize', onWindowResize);
+                }
+              };
+            }, [viewportNode]);
+
             return h(
               'div',
               {
@@ -1340,13 +1411,19 @@ if (win?.__ModuleLoader__) {
                   { id: 'stage', className: 'air75-stage' },
                   h(
                     'div',
-                    { id: 'myKeyBoardBac' },
-                    // Frame background
-                    h('img', {
-                      src: AIR75_FRAME_LIGHT,
-                      alt: 'Air75 V3 Frame',
-                      className: 'kb-frame',
-                    }),
+                    {
+                      className: 'air75-stage-viewport',
+                      ref: setViewportNode,
+                    },
+                    h(
+                      'div',
+                      { id: 'myKeyBoardBac' },
+                      // Frame background
+                      h('img', {
+                        src: AIR75_FRAME_LIGHT,
+                        alt: 'Air75 V3 Frame',
+                        className: 'kb-frame',
+                      }),
                     // 83 calibrated keycaps
                     AIR75_KEYS.map((key) => {
                       const isFKey = typeof key.slot === 'number';
@@ -1520,6 +1597,7 @@ if (win?.__ModuleLoader__) {
                         className: 'roller-img',
                       })
                     )
+                  )
                   )
                 )
               ),

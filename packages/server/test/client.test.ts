@@ -835,6 +835,20 @@ describe('DSH Client Companion Plugin (client.ts)', () => {
     expect(contentRule).toContain('max-width: 960px');
     expect(css).toContain("[data-platform='darwin'] .peripheral-page-head");
 
+    // 14. Keyboard blueprint scales responsively inside .air75-stage-viewport.
+    const viewportNode = renderedElements.find(
+      (el) => el.type === 'div' && el.props?.className === 'air75-stage-viewport'
+    );
+    expect(viewportNode).toBeDefined();
+    const viewportRule = /\.air75-stage-viewport \{([\s\S]*?)\}/.exec(css)?.[1] ?? '';
+    expect(viewportRule).toContain('width: 100%');
+    expect(viewportRule).toContain('max-width: 959px');
+    expect(viewportRule).toContain('aspect-ratio: 959 / 384');
+    expect(viewportRule).toContain('container-type: inline-size');
+    const boardRule = /#myKeyBoardBac \{([\s\S]*?)\}/.exec(css)?.[1] ?? '';
+    expect(boardRule).toContain('transform-origin: top left');
+    expect(boardRule).toContain('transform: scale(var(--air75-scale, 1))');
+
     if (typeof cleanup === 'function') cleanup();
   });
 });
