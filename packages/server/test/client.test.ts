@@ -38,6 +38,92 @@ describe('DSH Client Companion Plugin (client.ts)', () => {
     expect(content).not.toMatch(/export\s*\{/);
   });
 
+  it('inlines complete keycap wireframe SVG masks from render_air75_v3', () => {
+    const clientJsPath = join(__dirname, '../dist/client.js');
+    const content = readFileSync(clientJsPath, 'utf8');
+
+    class MockWebSocket {
+      public static OPEN = 1;
+      public onopen: any;
+      public onmessage: any;
+      public onclose: any;
+      public onerror: any;
+      public readyState = 1;
+      public send = vi.fn();
+      public close = vi.fn();
+    }
+    (globalThis as any).WebSocket = MockWebSocket;
+
+    const fn = new Function('window', 'WebSocket', content);
+    fn((globalThis as any).window, MockWebSocket);
+
+    const rendered: Array<{ type: any; props: any; children: any[] }> = [];
+    const mockReact = {
+      createElement: vi.fn((type: any, props: any, ...children: any[]) => {
+        const el = { type, props, children };
+        rendered.push(el);
+        return el;
+      }),
+      useState: vi.fn((init: any) => [init, () => {}]),
+      useEffect: vi.fn(),
+    };
+    const plugin = mockModuleLoader.load.mock.calls[0][0].factory((name: string) =>
+      name === 'react' ? mockReact : undefined
+    );
+
+    let panel: (() => any) | null = null;
+    const cleanup = plugin.apply({
+      slots: {
+        inject: (_key: string, register: () => unknown) => {
+          register();
+          return () => {};
+        },
+        register: (meta: any, component: any) => {
+          if (meta.name === 'main' && meta.key === 'peripheral') panel = component;
+          return () => {};
+        },
+      },
+      uiWorkspace: { openSession: vi.fn() },
+    });
+    expect(panel).not.toBeNull();
+    panel!();
+
+    const styleNode = rendered.find((el) => el.type === 'style');
+    const css: string = String(styleNode?.children?.[0] ?? '');
+    expect(css.length).toBeGreaterThan(0);
+
+    const ruleBody = (className: string): string => {
+      const match = new RegExp(`\\.${className} \\{([\\s\\S]*?)\\}`).exec(css);
+      expect(match, `.${className} rule must exist`).not.toBeNull();
+      return match![1];
+    };
+
+    const expectCompleteMask = (className: string, pathFragment: string, viewBox: string) => {
+      const body = ruleBody(className);
+      // Both the standard and -webkit-prefixed properties must carry the full
+      // data URL; a truncated URL silently disables the wireframe.
+      expect(body).toContain('-webkit-mask: url("data:image/svg+xml;charset=utf-8,');
+      expect(body).toContain('mask: url("data:image/svg+xml;charset=utf-8,');
+      expect(body.match(/center \/ 100% 100% no-repeat/g)).toHaveLength(2);
+      const values = [...body.matchAll(/url\("(data:image\/svg\+xml;charset=utf-8,[^"]+)"\)/g)].map(
+        (match) => match[1]
+      );
+      expect(values).toHaveLength(2);
+      for (const value of values) {
+        const svg = decodeURIComponent(value.split(',')[1] ?? '');
+        expect(svg).toContain(`viewBox="${viewBox}"`);
+        expect(svg).toContain('preserveAspectRatio="none"');
+        expect(svg).toContain(pathFragment);
+      }
+    };
+
+    expectCompleteMask('cap-left', 'M30,0H6C2.7,0,0,2.69,0,6v54.69', '0 0 30 66.69');
+    expectCompleteMask('cap-middle', 'M0,0v1.5h6.7V0H0Z', '0 0 6.7 66.69');
+    expectCompleteMask('cap-right', 'M24,0H0v1.5h14.75l-1.67.46', '0 0 30 66.69');
+
+    if (typeof cleanup === 'function') cleanup();
+  });
+
   it('registers with window.__ModuleLoader__ and defines apply with uiWorkspace', () => {
     // Dynamically evaluate client script in global context
     const clientJsPath = join(__dirname, '../dist/client.js');
