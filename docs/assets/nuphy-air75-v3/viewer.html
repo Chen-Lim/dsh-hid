@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NuPhy Air75 V3 - DSH HID 键盘可视化画板</title>
+  <style>
+    :root {
+      --bg: #0f1117;
+      --card-bg: #1a1d27;
+      --text: #f0f2f5;
+      --text-muted: #8b949e;
+      --accent: #58a6ff;
+      --border: #30363d;
+      --agent-idle: rgba(255, 255, 255, 0.4);
+      --agent-thinking: #38bdf8;
+      --agent-input: #f59e0b;
+      --agent-success: #10b981;
+      --agent-error: #ef4444;
+    }
+    body {
+      margin: 0;
+      padding: 24px;
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      min-height: 100vh;
+      box-sizing: border-box;
+    }
+    .header {
+      text-align: center;
+      margin-bottom: 24px;
+    }
+    .header h1 {
+      margin: 0 0 8px 0;
+      font-size: 26px;
+      font-weight: 700;
+      background: linear-gradient(135deg, #38bdf8, #818cf8);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    .header p {
+      margin: 0;
+      font-size: 14px;
+      color: var(--text-muted);
+    }
+    .controls {
+      display: flex;
+      gap: 12px;
+      margin-bottom: 24px;
+      background: var(--card-bg);
+      padding: 10px 16px;
+      border-radius: 12px;
+      border: 1px solid var(--border);
+      flex-wrap: wrap;
+      justify-content: center;
+      align-items: center;
+    }
+    .btn {
+      padding: 8px 14px;
+      border-radius: 8px;
+      border: 1px solid transparent;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      background: #21262d;
+      color: var(--text);
+    }
+    .btn:hover {
+      background: #30363d;
+      transform: translateY(-1px);
+    }
+    .btn.active {
+      border-color: currentColor;
+    }
+    .btn-idle { color: #94a3b8; }
+    .btn-idle.active { background: rgba(148, 163, 184, 0.2); }
+    .btn-thinking { color: var(--agent-thinking); }
+    .btn-thinking.active { background: rgba(56, 189, 248, 0.2); }
+    .btn-input { color: var(--agent-input); }
+    .btn-input.active { background: rgba(245, 158, 11, 0.2); }
+    .btn-success { color: var(--agent-success); }
+    .btn-success.active { background: rgba(16, 185, 129, 0.2); }
+    .btn-error { color: var(--agent-error); }
+    .btn-error.active { background: rgba(239, 68, 68, 0.2); }
+
+    .stage {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 32px;
+      box-shadow: 0 20px 40px rgba(0,0,0,0.4);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      max-width: 1060px;
+      width: 100%;
+      position: relative;
+    }
+    .keyboard-wrapper {
+      width: 100%;
+      max-width: 959px;
+      position: relative;
+      transition: all 0.3s ease;
+    }
+    .keyboard-svg {
+      width: 100%;
+      height: auto;
+      display: block;
+      filter: drop-shadow(0 10px 20px rgba(0,0,0,0.3));
+    }
+
+    /* Agent RGB Light Simulation */
+    .glow-aura {
+      position: absolute;
+      inset: -12px;
+      border-radius: 24px;
+      pointer-events: none;
+      z-index: 0;
+      opacity: 0;
+      transition: opacity 0.5s ease;
+    }
+    .state-thinking .glow-aura {
+      opacity: 0.8;
+      background: radial-gradient(ellipse at center, rgba(56, 189, 248, 0.35) 0%, transparent 70%);
+      animation: pulse-aura 2s infinite ease-in-out;
+    }
+    .state-input .glow-aura {
+      opacity: 0.9;
+      background: radial-gradient(ellipse at center, rgba(245, 158, 11, 0.4) 0%, transparent 70%);
+      animation: pulse-fast 1s infinite ease-in-out;
+    }
+    .state-success .glow-aura {
+      opacity: 0.8;
+      background: radial-gradient(ellipse at center, rgba(16, 185, 129, 0.35) 0%, transparent 70%);
+    }
+    .state-error .glow-aura {
+      opacity: 0.9;
+      background: radial-gradient(ellipse at center, rgba(239, 68, 68, 0.45) 0%, transparent 70%);
+      animation: blink 0.5s infinite alternate;
+    }
+
+    @keyframes pulse-aura {
+      0%, 100% { transform: scale(0.98); opacity: 0.5; }
+      50% { transform: scale(1.02); opacity: 0.85; }
+    }
+    @keyframes pulse-fast {
+      0%, 100% { opacity: 0.4; }
+      50% { opacity: 0.95; }
+    }
+    @keyframes blink {
+      0% { opacity: 0.2; }
+      100% { opacity: 0.9; }
+    }
+
+    .log-panel {
+      margin-top: 24px;
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 16px;
+      max-width: 1060px;
+      width: 100%;
+      box-sizing: border-box;
+      font-family: monospace;
+      font-size: 13px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .log-text {
+      color: var(--accent);
+    }
+    .file-links {
+      margin-top: 16px;
+      font-size: 13px;
+      color: var(--text-muted);
+    }
+    .file-links a {
+      color: var(--accent);
+      text-decoration: none;
+      margin: 0 8px;
+    }
+    .file-links a:hover {
+      text-decoration: underline;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="header">
+    <h1>NuPhy Air75 V3 × DSH HID Visualizer</h1>
+    <p>从 drive.nuphyio.com 提取的高精度超薄机械键盘图纸与智能体物理状态指示模拟</p>
+  </div>
+
+  <div class="controls">
+    <span style="font-size: 13px; color: var(--text-muted); margin-right: 8px;">Agent 状态灯效:</span>
+    <button class="btn btn-idle active" onclick="setState('idle')">⚪ Idle (空闲待机)</button>
+    <button class="btn btn-thinking" onclick="setState('thinking')">🔵 Thinking (推理运行)</button>
+    <button class="btn btn-input" onclick="setState('input')">🟠 Input Needed (等待授权)</button>
+    <button class="btn btn-success" onclick="setState('success')">🟢 Success (执行完毕)</button>
+    <button class="btn btn-error" onclick="setState('error')">🔴 Error (异常中断)</button>
+  </div>
+
+  <div class="stage" id="stageContainer">
+    <div class="glow-aura" id="glowAura"></div>
+    <div class="keyboard-wrapper" id="kbWrapper">
+      <img src="nuphy-air75-v3-drawing.svg?t=2" alt="NuPhy Air75 V3 Drawing" class="keyboard-svg" />
+    </div>
+  </div>
+
+  <div class="log-panel">
+    <div>当前交互日志: <span class="log-text" id="logText">就绪 (切换上方 Agent 状态查看硬件灯效模拟)</span></div>
+    <div id="statusBadge" style="padding: 4px 10px; border-radius: 6px; font-weight: bold; background: #334155; font-size: 12px; color: #cbd5e1;">IDLE</div>
+  </div>
+
+  <div class="file-links">
+    <span>提取的 Air75 V3 资源列表:</span>
+    <a href="nuphy-air75-v3-drawing.svg?t=2" target="_blank">nuphy-air75-v3-drawing.svg (完整矢量主图)</a> |
+    <a href="air75-v3-layout.json" target="_blank">air75-v3-layout.json (84键坐标配置)</a> |
+    <a href="Air75_V3_frame_light.png" target="_blank">外壳浅色图 (3465×1389)</a> |
+    <a href="Air75_V3_frame_dark.png" target="_blank">外壳深色图 (3465×1389)</a> |
+    <a href="Air75_V3_lever_light.png" target="_blank">右上角金属音量滚轮</a>
+  </div>
+
+  <script>
+    let currentState = 'idle';
+
+    function setState(state) {
+      currentState = state;
+      const stage = document.getElementById('stageContainer');
+      stage.className = 'stage state-' + state;
+
+      document.querySelectorAll('.controls .btn').forEach(b => {
+        if (b.classList.contains('btn-' + state)) {
+          b.classList.add('active');
+        } else if (b.classList.contains('btn-idle') || b.classList.contains('btn-thinking') || b.classList.contains('btn-input') || b.classList.contains('btn-success') || b.classList.contains('btn-error')) {
+          b.classList.remove('active');
+        }
+      });
+
+      const badge = document.getElementById('statusBadge');
+      const colors = {
+        idle: { bg: '#334155', text: '#cbd5e1', label: 'IDLE (待机)' },
+        thinking: { bg: '#0369a1', text: '#bae6fd', label: 'THINKING (思考中)' },
+        input: { bg: '#b45309', text: '#fde68a', label: 'INPUT NEEDED (等待确认)' },
+        success: { bg: '#047857', text: '#a7f3d0', label: 'SUCCESS (成功)' },
+        error: { bg: '#b91c1c', text: '#fecaca', label: 'ERROR (阻塞报错)' }
+      };
+      const c = colors[state];
+      badge.style.background = c.bg;
+      badge.style.color = c.text;
+      badge.innerText = c.label;
+
+      document.getElementById('logText').innerText = 'DSH Agent 状态切换为: ' + c.label;
+    }
+  </script>
+</body>
+</html>

@@ -1,0 +1,1303 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <title>NuPhy Air75 V3 Web Render</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+    body {
+      background: #f0f2f5;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      padding: 40px;
+    }
+    #stage {
+      background: #ffffff;
+      padding: 30px;
+      border-radius: 20px;
+      box-shadow: 0 20px 40px rgba(0,0,0,0.08);
+      display: inline-block;
+    }
+    #myKeyBoardBac {
+      position: relative;
+      width: 959px;
+      height: 384px;
+      margin: 0 auto;
+      user-select: none;
+    }
+    .kb-frame {
+      position: absolute;
+      left: 0;
+      top: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      z-index: 1;
+    }
+    .boxBacOut {
+      position: absolute;
+      z-index: 10;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .keyCapInner {
+      position: relative;
+      width: 100%;
+      height: 100%;
+    }
+    .keyCapBg {
+      position: absolute;
+      inset: 1px;
+      background-color: #fbfbfd;
+      border-radius: 5px;
+      box-shadow: 0 1px 2px rgba(0,0,0,0.06);
+      z-index: 1;
+    }
+    .wireframeBac {
+      height: 100%;
+      width: 100%;
+      display: flex;
+      justify-content: space-between;
+      position: absolute;
+      top: 0;
+      left: 0;
+      align-items: center;
+      z-index: 2;
+      pointer-events: none;
+    }
+    .wireframeBac > div {
+      height: 100%;
+    }
+    .wireframeBac > div:nth-of-type(2) {
+      flex: 1;
+    }
+    .cap-left {
+      width: 21.23px;
+      -webkit-mask: url('Vector_dwarf_left.288f17f5e948b6215b8e.svg') no-repeat center / 100% 100%;
+      mask: url('Vector_dwarf_left.288f17f5e948b6215b8e.svg') no-repeat center / 100% 100%;
+      background-color: #1d1d1f;
+    }
+    .cap-middle {
+      -webkit-mask: url('Vector_dwarf_middle.44b7cc1f6b6a04cdf373.svg') no-repeat center / 100% 100%;
+      mask: url('Vector_dwarf_middle.44b7cc1f6b6a04cdf373.svg') no-repeat center / 100% 100%;
+      background-color: #1d1d1f;
+    }
+    .cap-right {
+      width: 21.23px;
+      -webkit-mask: url('Vector_dwarf_right.1ba25231110122664132.svg') no-repeat center / 100% 100%;
+      mask: url('Vector_dwarf_right.1ba25231110122664132.svg') no-repeat center / 100% 100%;
+      background-color: #1d1d1f;
+    }
+    .boxBac {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 3;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+    }
+    .boxBac p {
+      margin: 0;
+      font-weight: 700;
+      color: rgba(29, 29, 31, 0.92);
+      text-align: center;
+      letter-spacing: -0.2px;
+    }
+    .key-dual {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      line-height: 1.15;
+    }
+    .key-dual .key-top {
+      font-size: 10px;
+      font-weight: 600;
+      color: rgba(29, 29, 31, 0.5);
+    }
+    .key-dual .key-sub {
+      font-size: 11px;
+      font-weight: 700;
+      color: rgba(29, 29, 31, 0.92);
+    }
+    .roller-container {
+      position: absolute;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 10;
+    }
+    .roller-img {
+      width: 48px;
+      height: 48px;
+      object-fit: contain;
+      filter: drop-shadow(0 1px 2px rgba(0,0,0,0.15));
+    }
+  </style>
+</head>
+<body>
+  <div id="stage">
+    <div id="myKeyBoardBac">
+      <img src="Air75_V3_frame_light.png" alt="Air75 V3 Frame" class="kb-frame" />
+      
+    <div class="boxBacOut" style="left: 19.87px; top: 22.08px; width: 55.2px; height: 55.2px;" id="key-KC_ESC">
+      <div class="keyCapInner">
+        <div class="keyCapBg"></div>
+        <div class="wireframeBac">
+          <div class="cap-left"></div>
+          <div class="cap-middle"></div>
+          <div class="cap-right"></div>
+        </div>
+        <div class="boxBac">
+          <p style="font-size: 11px;">ESC</p>
+        </div>
+      </div>
+    </div>
+    <div class="boxBacOut" style="left: 77.28px; top: 22.08px; width: 55.2px; height: 55.2px;" id="key-KC_F1">
+      <div class="keyCapInner">
+        <div class="keyCapBg"></div>
+        <div class="wireframeBac">
+          <div class="cap-left"></div>
+          <div class="cap-middle"></div>
+          <div class="cap-right"></div>
+        </div>
+        <div class="boxBac">
+          <p style="font-size: 11px;">F1</p>
+        </div>
+      </div>
+    </div>
+    <div class="boxBacOut" style="left: 134.69px; top: 22.08px; width: 55.2px; height: 55.2px;" id="key-KC_F2">
+      <div class="keyCapInner">
+        <div class="keyCapBg"></div>
+        <div class="wireframeBac">
+          <div class="cap-left"></div>
+          <div class="cap-middle"></div>
+          <div class="cap-right"></div>
+        </div>
+        <div class="boxBac">
+          <p style="font-size: 11px;">F2</p>
+        </div>
+      </div>
+    </div>
+    <div class="boxBacOut" style="left: 192.1px; top: 22.08px; width: 55.2px; height: 55.2px;" id="key-KC_F3">
+      <div class="keyCapInner">
+        <div class="keyCapBg"></div>
+        <div class="wireframeBac">
+          <div class="cap-left"></div>
+          <div class="cap-middle"></div>
+          <div class="cap-right"></div>
+        </div>
+        <div class="boxBac">
+          <p style="font-size: 11px;">F3</p>
+        </div>
+      </div>
+    </div>
+    <div class="boxBacOut" style="left: 249.5px; top: 22.08px; width: 55.2px; height: 55.2px;" id="key-KC_F4">
+      <div class="keyCapInner">
+        <div class="keyCapBg"></div>
+        <div class="wireframeBac">
+          <div class="cap-left"></div>
+          <div class="cap-middle"></div>
+          <div class="cap-right"></div>
+        </div>
+        <div class="boxBac">
+          <p style="font-size: 11px;">F4</p>
+        </div>
+      </div>
+    </div>
+    <div class="boxBacOut" style="left: 306.91px; top: 22.08px; width: 55.2px; height: 55.2px;" id="key-KC_F5">
+      <div class="keyCapInner">
+        <div class="keyCapBg"></div>
+        <div class="wireframeBac">
+          <div class="cap-left"></div>
+          <div class="cap-middle"></div>
+          <div class="cap-right"></div>
+        </div>
+        <div class="boxBac">
+          <p style="font-size: 11px;">F5</p>
+        </div>
+      </div>
+    </div>
+    <div class="boxBacOut" style="left: 364.32px; top: 22.08px; width: 55.2px; height: 55.2px;" id="key-KC_F6">
+      <div class="keyCapInner">
+        <div class="keyCapBg"></div>
+        <div class="wireframeBac">
+          <div class="cap-left"></div>
+          <div class="cap-middle"></div>
+          <div class="cap-right"></div>
+        </div>
+        <div class="boxBac">
+          <p style="font-size: 11px;">F6</p>
+        </div>
+      </div>
+    </div>
+    <div class="boxBacOut" style="left: 421.73px; top: 22.08px; width: 55.2px; height: 55.2px;" id="key-KC_F7">
+      <div class="keyCapInner">
+        <div class="keyCapBg"></div>
+        <div class="wireframeBac">
+          <div class="cap-left"></div>
+          <div class="cap-middle"></div>
+          <div class="cap-right"></div>
+        </div>
+        <div class="boxBac">
+          <p style="font-size: 11px;">F7</p>
+        </div>
+      </div>
+    </div>
+    <div class="boxBacOut" style="left: 479.14px; top: 22.08px; width: 55.2px; height: 55.2px;" id="key-KC_F8">
+      <div class="keyCapInner">
+        <div class="keyCapBg"></div>
+        <div class="wireframeBac">
+          <div class="cap-left"></div>
+          <div class="cap-middle"></div>
+          <div class="cap-right"></div>
+        </div>
+        <div class="boxBac">
+          <p style="font-size: 11px;">F8</p>
+        </div>
+      </div>
+    </div>
+    <div class="boxBacOut" style="left: 536.54px; top: 22.08px; width: 55.2px; height: 55.2px;" id="key-KC_F9">
+      <div class="keyCapInner">
+        <div class="keyCapBg"></div>
+        <div class="wireframeBac">
+          <div class="cap-left"></div>
+          <div class="cap-middle"></div>
+          <div class="cap-right"></div>
+        </div>
+        <div class="boxBac">
+          <p style="font-size: 11px;">F9</p>
+        </div>
+      </div>
+    </div>
+    <div class="boxBacOut" style="left: 593.95px; top: 22.08px; width: 55.2px; height: 55.2px;" id="key-KC_F10">
+      <div class="keyCapInner">
+        <div class="keyCapBg"></div>
+        <div class="wireframeBac">
+          <div class="cap-left"></div>
+          <div class="cap-middle"></div>
+          <div class="cap-right"></div>
+        </div>
+        <div class="boxBac">
+          <p style="font-size: 11px;">F10</p>
+        </div>
+      </div>
+    </div>
+    <div class="boxBacOut" style="left: 651.36px; top: 22.08px; width: 55.2px; height: 55.2px;" id="key-KC_F11">
+      <div class="keyCapInner">
+        <div class="keyCapBg"></div>
+        <div class="wireframeBac">
+          <div class="cap-left"></div>
+          <div class="cap-middle"></div>
+          <div class="cap-right"></div>
+        </div>
+        <div class="boxBac">
+          <p style="font-size: 11px;">F11</p>
+        </div>
+      </div>
+    </div>
+    <div class="boxBacOut" style="left: 708.77px; top: 22.08px; width: 55.2px; height: 55.2px;" id="key-KC_F12">
+      <div class="keyCapInner">
+        <div class="keyCapBg"></div>
+        <div class="wireframeBac">
+          <div class="cap-left"></div>
+          <div class="cap-middle"></div>
+          <div class="cap-right"></div>
+        </div>
+        <div class="boxBac">
+          <p style="font-size: 11px;">F12</p>
+        </div>
+      </div>
+    </div>
+    <div class="boxBacOut" style="left: 766.18px; top: 22.08px; width: 55.2px; height: 55.2px;" id="key-KC_FN_WIN_AREA_SCREENSHOT">
+      <div class="keyCapInner">
+        <div class="keyCapBg"></div>
+        <div class="wireframeBac">
+          <div class="cap-left"></div>
+          <div class="cap-middle"></div>
+          <div class="cap-right"></div>
+        </div>
+        <div class="boxBac">
+          <p style="font-size: 11px;">PRTSC</p>
+        </div>
+      </div>
+    </div>
+    <div class="boxBacOut" style="left: 823.58px; top: 22.08px; width: 55.2px; height: 55.2px;" id="key-KC_INSERT">
+      <div class="keyCapInner">
+        <div class="keyCapBg"></div>
+        <div class="wireframeBac">
+          <div class="cap-left"></div>
+          <div class="cap-middle"></div>
+          <div class="cap-right"></div>
+        </div>
+        <div class="boxBac">
+          <p style="font-size: 11px;">DEL</p>
+        </div>
+      </div>
+    </div>
+    <div class="boxBacOut" style="left: 19.87px; top: 79.49px; width: 55.2px; height: 55.2px;" id="key-KC_GRAVE">
+      <div class="keyCapInner">
+        <div class="keyCapBg"></div>
+        <div class="wireframeBac">
+          <div class="cap-left"></div>
+          <div class="cap-middle"></div>
+          <div class="cap-right"></div>
+        </div>
+        <div class="boxBac">
+          <div class="key-dual">
+          <span class="key-top">~</span>
+          <span class="key-sub">`</span>
+        </div>
+        </div>
+      </div>
+    </div>
+    <div class="boxBacOut" style="left: 77.28px; top: 79.49px; width: 55.2px; height: 55.2px;" id="key-KC_1">
+      <div class="keyCapInner">
+        <div class="keyCapBg"></div>
+        <div class="wireframeBac">
+          <div class="cap-left"></div>
+          <div class="cap-middle"></div>
+          <div class="cap-right"></div>
+        </div>
+        <div class="boxBac">
+          <div class="key-dual">
+          <span class="key-top">!</span>
+          <span class="key-sub">1</span>
+        </div>
+        </div>
+      </div>
+    </div>
+    <div class="boxBacOut" style="left: 134.69px; top: 79.49px; width: 55.2px; height: 55.2px;" id="key-KC_2">
+      <div class="keyCapInner">
+        <div class="keyCapBg"></div>
+        <div class="wireframeBac">
+          <div class="cap-left"></div>
+          <div class="cap-middle"></div>
+          <div class="cap-right"></div>
+        </div>
+        <div class="boxBac">
+          <div class="key-dual">
+          <span class="key-top">@</span>
+          <span class="key-sub">2</span>
+        </div>
+        </div>
+      </div>
+    </div>
+    <div class="boxBacOut" style="left: 192.1px; top: 79.49px; width: 55.2px; height: 55.2px;" id="key-KC_3">
+      <div class="keyCapInner">
+        <div class="keyCapBg"></div>
+        <div class="wireframeBac">
+          <div class="cap-left"></div>
+          <div class="cap-middle"></div>
+          <div class="cap-right"></div>
+        </div>
+        <div class="boxBac">
+          <div class="key-dual">
+          <span class="key-top">#</span>
+          <span class="key-sub">3</span>
+        </div>
+        </div>
+      </div>
+    </div>
+    <div class="boxBacOut" style="left: 249.5px; top: 79.49px; width: 55.2px; height: 55.2px;" id="key-KC_4">
+      <div class="keyCapInner">
+        <div class="keyCapBg"></div>
+        <div class="wireframeBac">
+          <div class="cap-left"></div>
+          <div class="cap-middle"></div>
+          <div class="cap-right"></div>
+        </div>
+        <div class="boxBac">
+          <div class="key-dual">
+          <span class="key-top">$</span>
+          <span class="key-sub">4</span>
+        </div>
+        </div>
+      </div>
+    </div>
+    <div class="boxBacOut" style="left: 306.91px; top: 79.49px; width: 55.2px; height: 55.2px;" id="key-KC_5">
+      <div class="keyCapInner">
+        <div class="keyCapBg"></div>
+        <div class="wireframeBac">
+          <div class="cap-left"></div>
+          <div class="cap-middle"></div>
+          <div class="cap-right"></div>
+        </div>
+        <div class="boxBac">
+          <div class="key-dual">
+          <span class="key-top">%</span>
+          <span class="key-sub">5</span>
+        </div>
+        </div>
+      </div>
+    </div>
+    <div class="boxBacOut" style="left: 364.32px; top: 79.49px; width: 55.2px; height: 55.2px;" id="key-KC_6">
+      <div class="keyCapInner">
+        <div class="keyCapBg"></div>
+        <div class="wireframeBac">
+          <div class="cap-left"></div>
+          <div class="cap-middle"></div>
+          <div class="cap-right"></div>
+        </div>
+        <div class="boxBac">
+          <div class="key-dual">
+          <span class="key-top">^</span>
+          <span class="key-sub">6</span>
+        </div>
+        </div>
+      </div>
+    </div>
+    <div class="boxBacOut" style="left: 421.73px; top: 79.49px; width: 55.2px; height: 55.2px;" id="key-KC_7">
+      <div class="keyCapInner">
+        <div class="keyCapBg"></div>
+        <div class="wireframeBac">
+          <div class="cap-left"></div>
+          <div class="cap-middle"></div>
+          <div class="cap-right"></div>
+        </div>
+        <div class="boxBac">
+          <div class="key-dual">
+          <span class="key-top">&</span>
+          <span class="key-sub">7</span>
+        </div>
+        </div>
+      </div>
+    </div>
+    <div class="boxBacOut" style="left: 479.14px; top: 79.49px; width: 55.2px; height: 55.2px;" id="key-KC_8">
+      <div class="keyCapInner">
+        <div class="keyCapBg"></div>
+        <div class="wireframeBac">
+          <div class="cap-left"></div>
+          <div class="cap-middle"></div>
+          <div class="cap-right"></div>
+        </div>
+        <div class="boxBac">
+          <div class="key-dual">
+          <span class="key-top">*</span>
+          <span class="key-sub">8</span>
+        </div>
+        </div>
+      </div>
+    </div>
+    <div class="boxBacOut" style="left: 536.54px; top: 79.49px; width: 55.2px; height: 55.2px;" id="key-KC_9">
+      <div class="keyCapInner">
+        <div class="keyCapBg"></div>
+        <div class="wireframeBac">
+          <div class="cap-left"></div>
+          <div class="cap-middle"></div>
+          <div class="cap-right"></div>
+        </div>
+        <div class="boxBac">
+          <div class="key-dual">
+          <span class="key-top">(</span>
+          <span class="key-sub">9</span>
+        </div>
+        </div>
+      </div>
+    </div>
+    <div class="boxBacOut" style="left: 593.95px; top: 79.49px; width: 55.2px; height: 55.2px;" id="key-KC_0">
+      <div class="keyCapInner">
+        <div class="keyCapBg"></div>
+        <div class="wireframeBac">
+          <div class="cap-left"></div>
+          <div class="cap-middle"></div>
+          <div class="cap-right"></div>
+        </div>
+        <div class="boxBac">
+          <div class="key-dual">
+          <span class="key-top">)</span>
+          <span class="key-sub">0</span>
+        </div>
+        </div>
+      </div>
+    </div>
+    <div class="boxBacOut" style="left: 651.36px; top: 79.49px; width: 55.2px; height: 55.2px;" id="key-KC_MINUS">
+      <div class="keyCapInner">
+        <div class="keyCapBg"></div>
+        <div class="wireframeBac">
+          <div class="cap-left"></div>
+          <div class="cap-middle"></div>
+          <div class="cap-right"></div>
+        </div>
+        <div class="boxBac">
+          <div class="key-dual">
+          <span class="key-top">_</span>
+          <span class="key-sub">-</span>
+        </div>
+        </div>
+      </div>
+    </div>
+    <div class="boxBacOut" style="left: 708.77px; top: 79.49px; width: 55.2px; height: 55.2px;" id="key-KC_EQUAL">
+      <div class="keyCapInner">
+        <div class="keyCapBg"></div>
+        <div class="wireframeBac">
+          <div class="cap-left"></div>
+          <div class="cap-middle"></div>
+          <div class="cap-right"></div>
+        </div>
+        <div class="boxBac">
+          <div class="key-dual">
+          <span class="key-top">+</span>
+          <span class="key-sub">=</span>
+        </div>
+        </div>
+      </div>
+    </div>
+    <div class="boxBacOut" style="left: 766.18px; top: 79.49px; width: 113.71px; height: 55.2px;" id="key-KC_BACKSPACE">
+      <div class="keyCapInner">
+        <div class="keyCapBg"></div>
+        <div class="wireframeBac">
+          <div class="cap-left"></div>
+          <div class="cap-middle"></div>
+          <div class="cap-right"></div>
+        </div>
+        <div class="boxBac">
+          <p style="font-size: 8.5px;">BACKSPACE</p>
+        </div>
+      </div>
+    </div>
+    <div class="boxBacOut" style="left: 882.1px; top: 79.49px; width: 55.2px; height: 55.2px;" id="key-KC_PAGE_UP">
+      <div class="keyCapInner">
+        <div class="keyCapBg"></div>
+        <div class="wireframeBac">
+          <div class="cap-left"></div>
+          <div class="cap-middle"></div>
+          <div class="cap-right"></div>
+        </div>
+        <div class="boxBac">
+          <p style="font-size: 11px;">PGUP</p>
+        </div>
+      </div>
+    </div>
+    <div class="boxBacOut" style="left: 19.87px; top: 136.9px; width: 83.9px; height: 55.2px;" id="key-KC_TAB">
+      <div class="keyCapInner">
+        <div class="keyCapBg"></div>
+        <div class="wireframeBac">
+          <div class="cap-left"></div>
+          <div class="cap-middle"></div>
+          <div class="cap-right"></div>
+        </div>
+        <div class="boxBac">
+          <p style="font-size: 11px;">TAB</p>
+        </div>
+      </div>
+    </div>
+    <div class="boxBacOut" style="left: 105.98px; top: 136.9px; width: 55.2px; height: 55.2px;" id="key-KC_Q">
+      <div class="keyCapInner">
+        <div class="keyCapBg"></div>
+        <div class="wireframeBac">
+          <div class="cap-left"></div>
+          <div class="cap-middle"></div>
+          <div class="cap-right"></div>
+        </div>
+        <div class="boxBac">
+          <p style="font-size: 11px;">Q</p>
+        </div>
+      </div>
+    </div>
+    <div class="boxBacOut" style="left: 163.39px; top: 136.9px; width: 55.2px; height: 55.2px;" id="key-KC_W">
+      <div class="keyCapInner">
+        <div class="keyCapBg"></div>
+        <div class="wireframeBac">
+          <div class="cap-left"></div>
+          <div class="cap-middle"></div>
+          <div class="cap-right"></div>
+        </div>
+        <div class="boxBac">
+          <p style="font-size: 11px;">W</p>
+        </div>
+      </div>
+    </div>
+    <div class="boxBacOut" style="left: 220.8px; top: 136.9px; width: 55.2px; height: 55.2px;" id="key-KC_E">
+      <div class="keyCapInner">
+        <div class="keyCapBg"></div>
+        <div class="wireframeBac">
+          <div class="cap-left"></div>
+          <div class="cap-middle"></div>
+          <div class="cap-right"></div>
+        </div>
+        <div class="boxBac">
+          <p style="font-size: 11px;">E</p>
+        </div>
+      </div>
+    </div>
+    <div class="boxBacOut" style="left: 278.21px; top: 136.9px; width: 55.2px; height: 55.2px;" id="key-KC_R">
+      <div class="keyCapInner">
+        <div class="keyCapBg"></div>
+        <div class="wireframeBac">
+          <div class="cap-left"></div>
+          <div class="cap-middle"></div>
+          <div class="cap-right"></div>
+        </div>
+        <div class="boxBac">
+          <p style="font-size: 11px;">R</p>
+        </div>
+      </div>
+    </div>
+    <div class="boxBacOut" style="left: 335.62px; top: 136.9px; width: 55.2px; height: 55.2px;" id="key-KC_T">
+      <div class="keyCapInner">
+        <div class="keyCapBg"></div>
+        <div class="wireframeBac">
+          <div class="cap-left"></div>
+          <div class="cap-middle"></div>
+          <div class="cap-right"></div>
+        </div>
+        <div class="boxBac">
+          <p style="font-size: 11px;">T</p>
+        </div>
+      </div>
+    </div>
+    <div class="boxBacOut" style="left: 393.02px; top: 136.9px; width: 55.2px; height: 55.2px;" id="key-KC_Y">
+      <div class="keyCapInner">
+        <div class="keyCapBg"></div>
+        <div class="wireframeBac">
+          <div class="cap-left"></div>
+          <div class="cap-middle"></div>
+          <div class="cap-right"></div>
+        </div>
+        <div class="boxBac">
+          <p style="font-size: 11px;">Y</p>
+        </div>
+      </div>
+    </div>
+    <div class="boxBacOut" style="left: 450.43px; top: 136.9px; width: 55.2px; height: 55.2px;" id="key-KC_U">
+      <div class="keyCapInner">
+        <div class="keyCapBg"></div>
+        <div class="wireframeBac">
+          <div class="cap-left"></div>
+          <div class="cap-middle"></div>
+          <div class="cap-right"></div>
+        </div>
+        <div class="boxBac">
+          <p style="font-size: 11px;">U</p>
+        </div>
+      </div>
+    </div>
+    <div class="boxBacOut" style="left: 507.84px; top: 136.9px; width: 55.2px; height: 55.2px;" id="key-KC_I">
+      <div class="keyCapInner">
+        <div class="keyCapBg"></div>
+        <div class="wireframeBac">
+          <div class="cap-left"></div>
+          <div class="cap-middle"></div>
+          <div class="cap-right"></div>
+        </div>
+        <div class="boxBac">
+          <p style="font-size: 11px;">I</p>
+        </div>
+      </div>
+    </div>
+    <div class="boxBacOut" style="left: 565.25px; top: 136.9px; width: 55.2px; height: 55.2px;" id="key-KC_O">
+      <div class="keyCapInner">
+        <div class="keyCapBg"></div>
+        <div class="wireframeBac">
+          <div class="cap-left"></div>
+          <div class="cap-middle"></div>
+          <div class="cap-right"></div>
+        </div>
+        <div class="boxBac">
+          <p style="font-size: 11px;">O</p>
+        </div>
+      </div>
+    </div>
+    <div class="boxBacOut" style="left: 622.66px; top: 136.9px; width: 55.2px; height: 55.2px;" id="key-KC_P">
+      <div class="keyCapInner">
+        <div class="keyCapBg"></div>
+        <div class="wireframeBac">
+          <div class="cap-left"></div>
+          <div class="cap-middle"></div>
+          <div class="cap-right"></div>
+        </div>
+        <div class="boxBac">
+          <p style="font-size: 11px;">P</p>
+        </div>
+      </div>
+    </div>
+    <div class="boxBacOut" style="left: 680.06px; top: 136.9px; width: 55.2px; height: 55.2px;" id="key-KC_LEFT_BRACKET">
+      <div class="keyCapInner">
+        <div class="keyCapBg"></div>
+        <div class="wireframeBac">
+          <div class="cap-left"></div>
+          <div class="cap-middle"></div>
+          <div class="cap-right"></div>
+        </div>
+        <div class="boxBac">
+          <div class="key-dual">
+          <span class="key-top">{</span>
+          <span class="key-sub">[</span>
+        </div>
+        </div>
+      </div>
+    </div>
+    <div class="boxBacOut" style="left: 737.47px; top: 136.9px; width: 55.2px; height: 55.2px;" id="key-KC_RIGHT_BRACKET">
+      <div class="keyCapInner">
+        <div class="keyCapBg"></div>
+        <div class="wireframeBac">
+          <div class="cap-left"></div>
+          <div class="cap-middle"></div>
+          <div class="cap-right"></div>
+        </div>
+        <div class="boxBac">
+          <div class="key-dual">
+          <span class="key-top">}</span>
+          <span class="key-sub">]</span>
+        </div>
+        </div>
+      </div>
+    </div>
+    <div class="boxBacOut" style="left: 794.88px; top: 136.9px; width: 85.01px; height: 55.2px;" id="key-KC_BACKSLASH">
+      <div class="keyCapInner">
+        <div class="keyCapBg"></div>
+        <div class="wireframeBac">
+          <div class="cap-left"></div>
+          <div class="cap-middle"></div>
+          <div class="cap-right"></div>
+        </div>
+        <div class="boxBac">
+          <div class="key-dual">
+          <span class="key-top">|</span>
+          <span class="key-sub">\</span>
+        </div>
+        </div>
+      </div>
+    </div>
+    <div class="boxBacOut" style="left: 882.1px; top: 136.9px; width: 55.2px; height: 55.2px;" id="key-KC_PAGE_DOWN">
+      <div class="keyCapInner">
+        <div class="keyCapBg"></div>
+        <div class="wireframeBac">
+          <div class="cap-left"></div>
+          <div class="cap-middle"></div>
+          <div class="cap-right"></div>
+        </div>
+        <div class="boxBac">
+          <p style="font-size: 11px;">PGDN</p>
+        </div>
+      </div>
+    </div>
+    <div class="boxBacOut" style="left: 19.87px; top: 194.3px; width: 98.81px; height: 55.2px;" id="key-KC_CAPS_LOCK">
+      <div class="keyCapInner">
+        <div class="keyCapBg"></div>
+        <div class="wireframeBac">
+          <div class="cap-left"></div>
+          <div class="cap-middle"></div>
+          <div class="cap-right"></div>
+        </div>
+        <div class="boxBac">
+          <p style="font-size: 11px;">CAPS</p>
+        </div>
+      </div>
+    </div>
+    <div class="boxBacOut" style="left: 120.89px; top: 194.3px; width: 55.2px; height: 55.2px;" id="key-KC_A">
+      <div class="keyCapInner">
+        <div class="keyCapBg"></div>
+        <div class="wireframeBac">
+          <div class="cap-left"></div>
+          <div class="cap-middle"></div>
+          <div class="cap-right"></div>
+        </div>
+        <div class="boxBac">
+          <p style="font-size: 11px;">A</p>
+        </div>
+      </div>
+    </div>
+    <div class="boxBacOut" style="left: 178.3px; top: 194.3px; width: 55.2px; height: 55.2px;" id="key-KC_S">
+      <div class="keyCapInner">
+        <div class="keyCapBg"></div>
+        <div class="wireframeBac">
+          <div class="cap-left"></div>
+          <div class="cap-middle"></div>
+          <div class="cap-right"></div>
+        </div>
+        <div class="boxBac">
+          <p style="font-size: 11px;">S</p>
+        </div>
+      </div>
+    </div>
+    <div class="boxBacOut" style="left: 235.7px; top: 194.3px; width: 55.2px; height: 55.2px;" id="key-KC_D">
+      <div class="keyCapInner">
+        <div class="keyCapBg"></div>
+        <div class="wireframeBac">
+          <div class="cap-left"></div>
+          <div class="cap-middle"></div>
+          <div class="cap-right"></div>
+        </div>
+        <div class="boxBac">
+          <p style="font-size: 11px;">D</p>
+        </div>
+      </div>
+    </div>
+    <div class="boxBacOut" style="left: 293.11px; top: 194.3px; width: 55.2px; height: 55.2px;" id="key-KC_F">
+      <div class="keyCapInner">
+        <div class="keyCapBg"></div>
+        <div class="wireframeBac">
+          <div class="cap-left"></div>
+          <div class="cap-middle"></div>
+          <div class="cap-right"></div>
+        </div>
+        <div class="boxBac">
+          <p style="font-size: 11px;">F</p>
+        </div>
+      </div>
+    </div>
+    <div class="boxBacOut" style="left: 350.52px; top: 194.3px; width: 55.2px; height: 55.2px;" id="key-KC_G">
+      <div class="keyCapInner">
+        <div class="keyCapBg"></div>
+        <div class="wireframeBac">
+          <div class="cap-left"></div>
+          <div class="cap-middle"></div>
+          <div class="cap-right"></div>
+        </div>
+        <div class="boxBac">
+          <p style="font-size: 11px;">G</p>
+        </div>
+      </div>
+    </div>
+    <div class="boxBacOut" style="left: 407.93px; top: 194.3px; width: 55.2px; height: 55.2px;" id="key-KC_H">
+      <div class="keyCapInner">
+        <div class="keyCapBg"></div>
+        <div class="wireframeBac">
+          <div class="cap-left"></div>
+          <div class="cap-middle"></div>
+          <div class="cap-right"></div>
+        </div>
+        <div class="boxBac">
+          <p style="font-size: 11px;">H</p>
+        </div>
+      </div>
+    </div>
+    <div class="boxBacOut" style="left: 465.34px; top: 194.3px; width: 55.2px; height: 55.2px;" id="key-KC_J">
+      <div class="keyCapInner">
+        <div class="keyCapBg"></div>
+        <div class="wireframeBac">
+          <div class="cap-left"></div>
+          <div class="cap-middle"></div>
+          <div class="cap-right"></div>
+        </div>
+        <div class="boxBac">
+          <p style="font-size: 11px;">J</p>
+        </div>
+      </div>
+    </div>
+    <div class="boxBacOut" style="left: 522.74px; top: 194.3px; width: 55.2px; height: 55.2px;" id="key-KC_K">
+      <div class="keyCapInner">
+        <div class="keyCapBg"></div>
+        <div class="wireframeBac">
+          <div class="cap-left"></div>
+          <div class="cap-middle"></div>
+          <div class="cap-right"></div>
+        </div>
+        <div class="boxBac">
+          <p style="font-size: 11px;">K</p>
+        </div>
+      </div>
+    </div>
+    <div class="boxBacOut" style="left: 580.15px; top: 194.3px; width: 55.2px; height: 55.2px;" id="key-KC_L">
+      <div class="keyCapInner">
+        <div class="keyCapBg"></div>
+        <div class="wireframeBac">
+          <div class="cap-left"></div>
+          <div class="cap-middle"></div>
+          <div class="cap-right"></div>
+        </div>
+        <div class="boxBac">
+          <p style="font-size: 11px;">L</p>
+        </div>
+      </div>
+    </div>
+    <div class="boxBacOut" style="left: 637.56px; top: 194.3px; width: 55.2px; height: 55.2px;" id="key-KC_SEMICOLON">
+      <div class="keyCapInner">
+        <div class="keyCapBg"></div>
+        <div class="wireframeBac">
+          <div class="cap-left"></div>
+          <div class="cap-middle"></div>
+          <div class="cap-right"></div>
+        </div>
+        <div class="boxBac">
+          <div class="key-dual">
+          <span class="key-top">:</span>
+          <span class="key-sub">;</span>
+        </div>
+        </div>
+      </div>
+    </div>
+    <div class="boxBacOut" style="left: 694.97px; top: 194.3px; width: 55.2px; height: 55.2px;" id="key-KC_QUOTE">
+      <div class="keyCapInner">
+        <div class="keyCapBg"></div>
+        <div class="wireframeBac">
+          <div class="cap-left"></div>
+          <div class="cap-middle"></div>
+          <div class="cap-right"></div>
+        </div>
+        <div class="boxBac">
+          <div class="key-dual">
+          <span class="key-top">"</span>
+          <span class="key-sub">'</span>
+        </div>
+        </div>
+      </div>
+    </div>
+    <div class="boxBacOut" style="left: 752.38px; top: 194.3px; width: 128.06px; height: 55.2px;" id="key-KC_ENTER">
+      <div class="keyCapInner">
+        <div class="keyCapBg"></div>
+        <div class="wireframeBac">
+          <div class="cap-left"></div>
+          <div class="cap-middle"></div>
+          <div class="cap-right"></div>
+        </div>
+        <div class="boxBac">
+          <p style="font-size: 11px;">ENTER</p>
+        </div>
+      </div>
+    </div>
+    <div class="boxBacOut" style="left: 882.65px; top: 194.3px; width: 55.2px; height: 55.2px;" id="key-KC_HOME">
+      <div class="keyCapInner">
+        <div class="keyCapBg"></div>
+        <div class="wireframeBac">
+          <div class="cap-left"></div>
+          <div class="cap-middle"></div>
+          <div class="cap-right"></div>
+        </div>
+        <div class="boxBac">
+          <p style="font-size: 11px;">HOME</p>
+        </div>
+      </div>
+    </div>
+    <div class="boxBacOut" style="left: 19.87px; top: 250.61px; width: 125.86px; height: 55.2px;" id="key-KC_LSFT">
+      <div class="keyCapInner">
+        <div class="keyCapBg"></div>
+        <div class="wireframeBac">
+          <div class="cap-left"></div>
+          <div class="cap-middle"></div>
+          <div class="cap-right"></div>
+        </div>
+        <div class="boxBac">
+          <p style="font-size: 11px;">SHIFT</p>
+        </div>
+      </div>
+    </div>
+    <div class="boxBacOut" style="left: 147.94px; top: 250.61px; width: 55.2px; height: 55.2px;" id="key-KC_Z">
+      <div class="keyCapInner">
+        <div class="keyCapBg"></div>
+        <div class="wireframeBac">
+          <div class="cap-left"></div>
+          <div class="cap-middle"></div>
+          <div class="cap-right"></div>
+        </div>
+        <div class="boxBac">
+          <p style="font-size: 11px;">Z</p>
+        </div>
+      </div>
+    </div>
+    <div class="boxBacOut" style="left: 205.34px; top: 250.61px; width: 55.2px; height: 55.2px;" id="key-KC_X">
+      <div class="keyCapInner">
+        <div class="keyCapBg"></div>
+        <div class="wireframeBac">
+          <div class="cap-left"></div>
+          <div class="cap-middle"></div>
+          <div class="cap-right"></div>
+        </div>
+        <div class="boxBac">
+          <p style="font-size: 11px;">X</p>
+        </div>
+      </div>
+    </div>
+    <div class="boxBacOut" style="left: 262.75px; top: 250.61px; width: 55.2px; height: 55.2px;" id="key-KC_C">
+      <div class="keyCapInner">
+        <div class="keyCapBg"></div>
+        <div class="wireframeBac">
+          <div class="cap-left"></div>
+          <div class="cap-middle"></div>
+          <div class="cap-right"></div>
+        </div>
+        <div class="boxBac">
+          <p style="font-size: 11px;">C</p>
+        </div>
+      </div>
+    </div>
+    <div class="boxBacOut" style="left: 320.16px; top: 250.61px; width: 55.2px; height: 55.2px;" id="key-KC_V">
+      <div class="keyCapInner">
+        <div class="keyCapBg"></div>
+        <div class="wireframeBac">
+          <div class="cap-left"></div>
+          <div class="cap-middle"></div>
+          <div class="cap-right"></div>
+        </div>
+        <div class="boxBac">
+          <p style="font-size: 11px;">V</p>
+        </div>
+      </div>
+    </div>
+    <div class="boxBacOut" style="left: 377.57px; top: 250.61px; width: 55.2px; height: 55.2px;" id="key-KC_B">
+      <div class="keyCapInner">
+        <div class="keyCapBg"></div>
+        <div class="wireframeBac">
+          <div class="cap-left"></div>
+          <div class="cap-middle"></div>
+          <div class="cap-right"></div>
+        </div>
+        <div class="boxBac">
+          <p style="font-size: 11px;">B</p>
+        </div>
+      </div>
+    </div>
+    <div class="boxBacOut" style="left: 434.98px; top: 250.61px; width: 55.2px; height: 55.2px;" id="key-KC_N">
+      <div class="keyCapInner">
+        <div class="keyCapBg"></div>
+        <div class="wireframeBac">
+          <div class="cap-left"></div>
+          <div class="cap-middle"></div>
+          <div class="cap-right"></div>
+        </div>
+        <div class="boxBac">
+          <p style="font-size: 11px;">N</p>
+        </div>
+      </div>
+    </div>
+    <div class="boxBacOut" style="left: 492.38px; top: 250.61px; width: 55.2px; height: 55.2px;" id="key-KC_M">
+      <div class="keyCapInner">
+        <div class="keyCapBg"></div>
+        <div class="wireframeBac">
+          <div class="cap-left"></div>
+          <div class="cap-middle"></div>
+          <div class="cap-right"></div>
+        </div>
+        <div class="boxBac">
+          <p style="font-size: 11px;">M</p>
+        </div>
+      </div>
+    </div>
+    <div class="boxBacOut" style="left: 549.79px; top: 250.61px; width: 55.2px; height: 55.2px;" id="key-KC_COMMA">
+      <div class="keyCapInner">
+        <div class="keyCapBg"></div>
+        <div class="wireframeBac">
+          <div class="cap-left"></div>
+          <div class="cap-middle"></div>
+          <div class="cap-right"></div>
+        </div>
+        <div class="boxBac">
+          <div class="key-dual">
+          <span class="key-top"><</span>
+          <span class="key-sub">,</span>
+        </div>
+        </div>
+      </div>
+    </div>
+    <div class="boxBacOut" style="left: 607.2px; top: 250.61px; width: 55.2px; height: 55.2px;" id="key-KC_DOT">
+      <div class="keyCapInner">
+        <div class="keyCapBg"></div>
+        <div class="wireframeBac">
+          <div class="cap-left"></div>
+          <div class="cap-middle"></div>
+          <div class="cap-right"></div>
+        </div>
+        <div class="boxBac">
+          <div class="key-dual">
+          <span class="key-top">></span>
+          <span class="key-sub">.</span>
+        </div>
+        </div>
+      </div>
+    </div>
+    <div class="boxBacOut" style="left: 664.61px; top: 250.61px; width: 55.2px; height: 55.2px;" id="key-KC_SLASH">
+      <div class="keyCapInner">
+        <div class="keyCapBg"></div>
+        <div class="wireframeBac">
+          <div class="cap-left"></div>
+          <div class="cap-middle"></div>
+          <div class="cap-right"></div>
+        </div>
+        <div class="boxBac">
+          <div class="key-dual">
+          <span class="key-top">?</span>
+          <span class="key-sub">/</span>
+        </div>
+        </div>
+      </div>
+    </div>
+    <div class="boxBacOut" style="left: 722.02px; top: 250.61px; width: 100.46px; height: 55.2px;" id="key-KC_RSFT">
+      <div class="keyCapInner">
+        <div class="keyCapBg"></div>
+        <div class="wireframeBac">
+          <div class="cap-left"></div>
+          <div class="cap-middle"></div>
+          <div class="cap-right"></div>
+        </div>
+        <div class="boxBac">
+          <p style="font-size: 11px;">SHIFT</p>
+        </div>
+      </div>
+    </div>
+    <div class="boxBacOut" style="left: 824.69px; top: 250.61px; width: 55.2px; height: 55.2px;" id="key-KC_UP">
+      <div class="keyCapInner">
+        <div class="keyCapBg"></div>
+        <div class="wireframeBac">
+          <div class="cap-left"></div>
+          <div class="cap-middle"></div>
+          <div class="cap-right"></div>
+        </div>
+        <div class="boxBac">
+          <p style="font-size: 11px;">↑</p>
+        </div>
+      </div>
+    </div>
+    <div class="boxBacOut" style="left: 882.1px; top: 250.61px; width: 55.2px; height: 55.2px;" id="key-KC_END">
+      <div class="keyCapInner">
+        <div class="keyCapBg"></div>
+        <div class="wireframeBac">
+          <div class="cap-left"></div>
+          <div class="cap-middle"></div>
+          <div class="cap-right"></div>
+        </div>
+        <div class="boxBac">
+          <p style="font-size: 11px;">END</p>
+        </div>
+      </div>
+    </div>
+    <div class="boxBacOut" style="left: 19.87px; top: 308.02px; width: 69.0px; height: 55.2px;" id="key-KC_LCTL">
+      <div class="keyCapInner">
+        <div class="keyCapBg"></div>
+        <div class="wireframeBac">
+          <div class="cap-left"></div>
+          <div class="cap-middle"></div>
+          <div class="cap-right"></div>
+        </div>
+        <div class="boxBac">
+          <p style="font-size: 11px;">CTRL</p>
+        </div>
+      </div>
+    </div>
+    <div class="boxBacOut" style="left: 91.08px; top: 308.02px; width: 69.0px; height: 55.2px;" id="key-KC_LGUI">
+      <div class="keyCapInner">
+        <div class="keyCapBg"></div>
+        <div class="wireframeBac">
+          <div class="cap-left"></div>
+          <div class="cap-middle"></div>
+          <div class="cap-right"></div>
+        </div>
+        <div class="boxBac">
+          <p style="font-size: 11px;">OPT</p>
+        </div>
+      </div>
+    </div>
+    <div class="boxBacOut" style="left: 162.29px; top: 308.02px; width: 69.0px; height: 55.2px;" id="key-KC_LALT">
+      <div class="keyCapInner">
+        <div class="keyCapBg"></div>
+        <div class="wireframeBac">
+          <div class="cap-left"></div>
+          <div class="cap-middle"></div>
+          <div class="cap-right"></div>
+        </div>
+        <div class="boxBac">
+          <p style="font-size: 11px;">CMD</p>
+        </div>
+      </div>
+    </div>
+    <div class="boxBacOut" style="left: 233.5px; top: 308.02px; width: 358.8px; height: 55.2px;" id="key-KC_SPACE">
+      <div class="keyCapInner">
+        <div class="keyCapBg"></div>
+        <div class="wireframeBac">
+          <div class="cap-left"></div>
+          <div class="cap-middle"></div>
+          <div class="cap-right"></div>
+        </div>
+        <div class="boxBac">
+          <p style="font-size: 11px;">SPACE</p>
+        </div>
+      </div>
+    </div>
+    <div class="boxBacOut" style="left: 594.5px; top: 308.02px; width: 55.2px; height: 55.2px;" id="key-KC_RALT">
+      <div class="keyCapInner">
+        <div class="keyCapBg"></div>
+        <div class="wireframeBac">
+          <div class="cap-left"></div>
+          <div class="cap-middle"></div>
+          <div class="cap-right"></div>
+        </div>
+        <div class="boxBac">
+          <p style="font-size: 11px;">CMD</p>
+        </div>
+      </div>
+    </div>
+    <div class="boxBacOut" style="left: 651.91px; top: 308.02px; width: 55.2px; height: 55.2px;" id="key-KC_FN1">
+      <div class="keyCapInner">
+        <div class="keyCapBg"></div>
+        <div class="wireframeBac">
+          <div class="cap-left"></div>
+          <div class="cap-middle"></div>
+          <div class="cap-right"></div>
+        </div>
+        <div class="boxBac">
+          <p style="font-size: 11px;">FN1</p>
+        </div>
+      </div>
+    </div>
+    <div class="boxBacOut" style="left: 709.32px; top: 308.02px; width: 55.2px; height: 55.2px;" id="key-KC_RCTL">
+      <div class="keyCapInner">
+        <div class="keyCapBg"></div>
+        <div class="wireframeBac">
+          <div class="cap-left"></div>
+          <div class="cap-middle"></div>
+          <div class="cap-right"></div>
+        </div>
+        <div class="boxBac">
+          <p style="font-size: 11px;">CTRL</p>
+        </div>
+      </div>
+    </div>
+    <div class="boxBacOut" style="left: 766.73px; top: 308.02px; width: 55.2px; height: 55.2px;" id="key-KC_LEFT">
+      <div class="keyCapInner">
+        <div class="keyCapBg"></div>
+        <div class="wireframeBac">
+          <div class="cap-left"></div>
+          <div class="cap-middle"></div>
+          <div class="cap-right"></div>
+        </div>
+        <div class="boxBac">
+          <p style="font-size: 11px;">←</p>
+        </div>
+      </div>
+    </div>
+    <div class="boxBacOut" style="left: 824.14px; top: 308.02px; width: 55.2px; height: 55.2px;" id="key-KC_DOWN">
+      <div class="keyCapInner">
+        <div class="keyCapBg"></div>
+        <div class="wireframeBac">
+          <div class="cap-left"></div>
+          <div class="cap-middle"></div>
+          <div class="cap-right"></div>
+        </div>
+        <div class="boxBac">
+          <p style="font-size: 11px;">↓</p>
+        </div>
+      </div>
+    </div>
+    <div class="boxBacOut" style="left: 881.54px; top: 308.02px; width: 55.2px; height: 55.2px;" id="key-KC_RIGHT">
+      <div class="keyCapInner">
+        <div class="keyCapBg"></div>
+        <div class="wireframeBac">
+          <div class="cap-left"></div>
+          <div class="cap-middle"></div>
+          <div class="cap-right"></div>
+        </div>
+        <div class="boxBac">
+          <p style="font-size: 11px;">→</p>
+        </div>
+      </div>
+    </div>
+      
+    <div class="roller-container" style="left: 880.99px; top: 22.08px; width: 55.2px; height: 55.2px;">
+      <img src="Air75_V3_lever_light.png" alt="Air75 V3 Volume Roller" class="roller-img" />
+    </div>
+    </div>
+  </div>
+</body>
+</html>
