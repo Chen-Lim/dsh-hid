@@ -64,6 +64,8 @@ interface KeyboardKeyDef {
   label?: string;
   topLabel?: string;
   subLabel?: string;
+  /** Legend size in px; the reference renderer shrinks long legends like BACKSPACE. */
+  labelSize?: number;
   slot?: number;
 }
 
@@ -201,9 +203,9 @@ const AIR75_CSS = `
   }
   #stage.air75-stage {
     background: #ffffff;
-    padding: 24px 28px;
-    border-radius: 18px;
-    box-shadow: 0 10px 30px rgba(0,0,0,0.12);
+    padding: 30px;
+    border-radius: 20px;
+    box-shadow: 0 20px 40px rgba(0,0,0,0.08);
     display: inline-block;
     user-select: none;
   }
@@ -370,7 +372,7 @@ const AIR75_KEYS: KeyboardKeyDef[] = [
   { id: "key-KC_0", left: 593.95, top: 79.49, w: 55.2, h: 55.2, topLabel: ")", subLabel: "0" },
   { id: "key-KC_MINUS", left: 651.36, top: 79.49, w: 55.2, h: 55.2, topLabel: "_", subLabel: "-" },
   { id: "key-KC_EQUAL", left: 708.77, top: 79.49, w: 55.2, h: 55.2, topLabel: "+", subLabel: "=" },
-  { id: "key-KC_BACKSPACE", left: 766.18, top: 79.49, w: 113.71, h: 55.2, label: "BACKSPACE" },
+  { id: "key-KC_BACKSPACE", left: 766.18, top: 79.49, w: 113.71, h: 55.2, label: "BACKSPACE", labelSize: 8.5 },
   { id: "key-KC_PAGE_UP", left: 882.1, top: 79.49, w: 55.2, h: 55.2, label: "PGUP" },
   { id: "key-KC_TAB", left: 19.87, top: 136.9, w: 83.9, h: 55.2, label: "TAB" },
   { id: "key-KC_Q", left: 105.98, top: 136.9, w: 55.2, h: 55.2, label: "Q" },
@@ -1337,12 +1339,14 @@ if (win?.__ModuleLoader__) {
                       } else {
                         keyContent = h(
                           'p',
-                          { style: { fontSize: '11px', color: textColor, margin: 0 } },
-                          isAcceptKey && key.id === 'key-KC_ENTER'
-                            ? 'ENTER ✓'
-                            : isRejectKey && key.id === 'key-KC_ESC'
-                            ? 'ESC ✕'
-                            : key.label ?? ''
+                          {
+                            style: {
+                              fontSize: `${key.labelSize ?? 11}px`,
+                              color: textColor,
+                              margin: 0,
+                            },
+                          },
+                          key.label ?? ''
                         );
                       }
 

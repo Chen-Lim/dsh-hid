@@ -745,6 +745,22 @@ describe('DSH Client Companion Plugin (client.ts)', () => {
     );
     expect(wireframeSubNodes.length).toBeGreaterThan(0);
 
+    // 10. Verify reference renderer metrics: stage card, long-legend size, exact legends
+    const styleNode = renderedElements.find((el) => el.type === 'style');
+    const css = String(styleNode?.children?.[0] ?? '');
+    const stageRule = /#stage\.air75-stage \{([\s\S]*?)\}/.exec(css)?.[1] ?? '';
+    expect(stageRule).toContain('padding: 30px');;
+    expect(stageRule).toContain('border-radius: 20px');
+    expect(stageRule).toContain('box-shadow: 0 20px 40px rgba(0,0,0,0.08)');
+
+    const legendNodes = renderedElements.filter((el) => el.type === 'p');
+    const backspaceLegend = legendNodes.find((el) => el.children?.[0] === 'BACKSPACE');
+    expect(backspaceLegend?.props?.style?.fontSize).toBe('8.5px');
+    expect(legendNodes.some((el) => el.children?.[0] === 'ENTER')).toBe(true);
+    expect(legendNodes.some((el) => el.children?.[0] === 'ESC')).toBe(true);
+    expect(legendNodes.some((el) => String(el.children?.[0]).includes('✓'))).toBe(false);
+    expect(legendNodes.some((el) => String(el.children?.[0]).includes('✕'))).toBe(false);
+
     if (typeof cleanup === 'function') cleanup();
   });
 });
