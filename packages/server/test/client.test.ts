@@ -481,4 +481,129 @@ describe('DSH Client Companion Plugin (client.ts)', () => {
 
     if (typeof cleanup === 'function') cleanup();
   });
+
+  it('renders upper slot list and lower NuPhy Air75 V3 keyboard visualization with slot mapping', () => {
+    const clientJsPath = join(__dirname, '../dist/client.js');
+    const content = readFileSync(clientJsPath, 'utf8');
+
+    let capturedWs: any = null;
+    class MockWebSocket {
+      public static OPEN = 1;
+      public onopen: any;
+      public onmessage: any;
+      public onclose: any;
+      public onerror: any;
+      public readyState = 1;
+      public send = vi.fn();
+      public close = vi.fn();
+      constructor() {
+        capturedWs = this;
+      }
+    }
+    (globalThis as any).WebSocket = MockWebSocket;
+
+    const fn = new Function('window', 'WebSocket', content);
+    fn((globalThis as any).window, MockWebSocket);
+
+    const renderedElements: Array<{ type: any; props: any; children: any[] }> = [];
+    const mockReact = {
+      createElement: vi.fn((type: any, props: any, ...children: any[]) => {
+        const el = { type, props, children };
+        renderedElements.push(el);
+        return el;
+      }),
+      useState: vi.fn((init: any) => [init, () => {}]),
+      useEffect: vi.fn(),
+    };
+
+    const plugin = mockModuleLoader.load.mock.calls[0][0].factory((name: string) =>
+      name === 'react' ? mockReact : undefined
+    );
+
+    let panelComponent: (() => any) | null = null;
+    const inject = vi.fn((_key: string, register: () => unknown) => {
+      register();
+      return () => {};
+    });
+    const register = vi.fn((meta: any, comp: any) => {
+      if (meta.name === 'main' && meta.key === 'peripheral') {
+        panelComponent = comp;
+      }
+      return () => {};
+    });
+
+    const openSessionSpy = vi.fn();
+    const mockUiWorkspace = { openSession: openSessionSpy };
+    const cleanup = plugin.apply({
+      uiWorkspace: mockUiWorkspace,
+      slots: { inject, register },
+    });
+
+    expect(panelComponent).not.toBeNull();
+
+    // Populate snapshot with 2 active slots: Slot 1 is NEEDS_INPUT, Slot 2 is RUNNING
+    capturedWs.onmessage({
+      data: JSON.stringify({
+        method: 'peripheral/snapshot',
+        params: {
+          focusedSlot: 1,
+          slots: [
+            {
+              slotIndex: 1,
+              sessionId: 'sess-approval-1',
+              status: 'NEEDS_INPUT',
+              activeTool: 'bash',
+              question: { prompt: 'Allow bash command?' },
+            },
+            {
+              slotIndex: 2,
+              sessionId: 'sess-running-2',
+              status: 'RUNNING',
+              activeTool: 'read_file',
+            },
+          ],
+        },
+      }),
+    });
+
+    renderedElements.length = 0;
+    panelComponent!();
+
+    // 1. Check that SVG keyboard canvas is rendered with NuPhy Air75 V3 viewBox
+    const svgKeyboard = renderedElements.find(
+      (el) => el.type === 'svg' && el.props && el.props.viewBox === '0 0 959 384'
+    );
+    expect(svgKeyboard).toBeDefined();
+
+    // 2. Check that F1..F12 key elements exist in the SVG
+    const keyGNodes = renderedElements.filter(
+      (el) => el.type === 'g' && el.props && el.props.onClick
+    );
+    expect(keyGNodes.length).toBeGreaterThanOrEqual(12);
+
+    // 3. Find key F2 and click it -> triggers switchFocus(2) and opens session
+    const f2Node = keyGNodes.find(
+      (el) => el.props && el.props.key === 'KC_F2'
+    );
+    expect(f2Node).toBeDefined();
+    f2Node?.props?.onClick();
+
+    expect(openSessionSpy).toHaveBeenCalledWith('sess-running-2');
+    const f2Sent = JSON.parse(capturedWs.send.mock.calls.at(-1)[0]);
+    expect(f2Sent.method).toBe('peripheral/switchFocus');
+    expect(f2Sent.params.slotIndex).toBe(2);
+
+    // 4. In Slot 1 (NEEDS_INPUT), check that clicking the virtual Enter key approves
+    const enterNode = keyGNodes.find(
+      (el) => el.props && el.props.key === 'KC_ENTER'
+    );
+    expect(enterNode).toBeDefined();
+    enterNode?.props?.onClick();
+
+    const enterSent = JSON.parse(capturedWs.send.mock.calls.at(-1)[0]);
+    expect(enterSent.method).toBe('peripheral/selectOption');
+    expect(enterSent.params.action).toBe('ACCEPT');
+
+    if (typeof cleanup === 'function') cleanup();
+  });
 });

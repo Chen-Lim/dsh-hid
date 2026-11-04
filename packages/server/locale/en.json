@@ -24,5 +24,14 @@
   "transport.2.4g": "2.4G Wireless",
   "transport.bluetooth": "Bluetooth (Keys Only)",
   "transport.disconnected": "No Hardware",
-  "bluetoothNotice": "Bluetooth mode active: per-key RGB is unavailable over Bluetooth. Physical shortcut keys (F1–F12 / Y / N / Enter / Esc) and audio alerts remain active. Connect via USB or 2.4G Dongle for full RGB."
+  "bluetoothNotice": "Bluetooth mode active: per-key RGB is unavailable over Bluetooth. Physical shortcut keys (F1–F12 / Y / N / Enter / Esc) and audio alerts remain active. Connect via USB or 2.4G Dongle for full RGB.",
+  "keyboardTitle": "NuPhy Air75 V3 Physical Keyboard Indicator",
+  "keyboardSubtitle": "F1–F12 map to 12 agent slots. Click keycaps to switch focus or trigger quick actions.",
+  "keyHint": "Press physical F1–F12 to switch slots; press Enter/Y to accept or Esc/N to reject when input is needed.",
+  "accept": "Accept",
+  "reject": "Reject",
+  "alwaysAllow": "Always Allow",
+  "quickActions": "Actions",
+  "activeSlot": "Active Slot",
+  "noSession": "No Session"
 }

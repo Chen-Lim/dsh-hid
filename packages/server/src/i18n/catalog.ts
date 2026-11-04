@@ -44,6 +44,17 @@ export const EN_MESSAGES: MessageCatalog = {
   'transport.disconnected': 'No Hardware',
   bluetoothNotice:
     'Bluetooth mode active: per-key RGB is unavailable over Bluetooth. Physical shortcut keys (F1–F12 / Y / N / Enter / Esc) and audio alerts remain active. Connect via USB or 2.4G Dongle for full RGB.',
+  keyboardTitle: 'NuPhy Air75 V3 Physical Keyboard Indicator',
+  keyboardSubtitle:
+    'F1–F12 map to 12 agent slots. Click keycaps to switch focus or trigger quick actions.',
+  keyHint:
+    'Press physical F1–F12 to switch slots; press Enter/Y to accept or Esc/N to reject when input is needed.',
+  accept: 'Accept',
+  reject: 'Reject',
+  alwaysAllow: 'Always Allow',
+  quickActions: 'Actions',
+  activeSlot: 'Active Slot',
+  noSession: 'No Session',
 };
 
 export const ZH_MESSAGES: MessageCatalog = {
@@ -77,6 +88,17 @@ export const ZH_MESSAGES: MessageCatalog = {
   'transport.disconnected': '未检测到硬件',
   bluetoothNotice:
     '当前处于蓝牙连接模式：蓝牙协议不支持单键 RGB 灯效，物理快捷键（F1–F12 / Y / N / Enter / Esc）与声音提示仍正常工作。插入 2.4G 接收器或 USB 线即可恢复完整灯效。',
+  keyboardTitle: 'NuPhy Air75 V3 物理键盘实时指示',
+  keyboardSubtitle:
+    'F1–F12 对应 12 个智能体槽位，支持点击键帽切换焦点与快捷操作。',
+  keyHint:
+    '按物理键 F1–F12 切换槽位；等待输入时按 Enter/Y 同意，Esc/N 拒绝',
+  accept: '同意',
+  reject: '拒绝',
+  alwaysAllow: '总是允许',
+  quickActions: '操作',
+  activeSlot: '当前槽位',
+  noSession: '无会话',
 };
 
 export const ZH_CN_MESSAGES: MessageCatalog = ZH_MESSAGES;
