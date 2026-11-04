@@ -44,10 +44,14 @@ struct NuphyDeviceProfile: Sendable, Equatable {
 final class BluetoothKeyboard {
     static func matches(_ p: [String:Any]) -> Bool {
         guard (p["VendorID"] as? NSNumber)?.intValue == 2007,
-              (p["ProductID"] as? NSNumber)?.intValue == 0,
-              ["Bluetooth", "Bluetooth Low Energy"].contains(p["Transport"] as? String ?? ""),
-              (p["Manufacturer"] as? String)?.lowercased() == "nuphy",
               let product = p["Product"] as? String else { return false }
+        let transport = p["Transport"] as? String ?? ""
+        if !transport.isEmpty && !["Bluetooth", "Bluetooth Low Energy"].contains(transport) {
+            return false
+        }
+        if let manufacturer = p["Manufacturer"] as? String, !manufacturer.isEmpty {
+            guard manufacturer.lowercased().contains("nuphy") else { return false }
+        }
         return product.range(of: "^(NuPhy )?Air(65|75|96) V3(-[123])?$", options: .regularExpression) != nil
     }
     static func identities() -> [[String:Any]] {
@@ -2301,6 +2305,8 @@ final class DshWebSocketDaemon: @unchecked Sendable {
         }
     }
 
+    private var lastDeviceProbeAtMs: Double = 0
+
     private func startFrameLoop() {
         let timer = DispatchSource.makeTimerSource(queue: .main)
         timer.schedule(deadline: .now() + 0.033, repeating: 0.033) // ~30 FPS delta-diff loop for breathing states
@@ -2309,6 +2315,13 @@ final class DshWebSocketDaemon: @unchecked Sendable {
                   self.running,
                   !self.hardwareMockMode else { return }
             let nowMs = ProcessInfo.processInfo.systemUptime * 1000.0
+
+            // Background device probe & reconnect every 1.5s if not currently connected
+            if !self.server.device.connected && nowMs - self.lastDeviceProbeAtMs >= 1500.0 {
+                self.lastDeviceProbeAtMs = nowMs
+                self.renderToHardwareIfAvailable(nowMs: nowMs, updateSide: false)
+            }
+
             if self.server.device.connected && self.server.device.armed {
                 guard self.rpcSession.hasActiveSlots, self.rpcSession.shouldPulseFocusedSlot else { return }
                 _ = try? self.rpcSession.syncToDevice(self.server.device, nowMs: nowMs, updateSide: false, verify: false, pulseFocused: true)
@@ -2363,35 +2376,24 @@ final class DshWebSocketDaemon: @unchecked Sendable {
     private func renderToHardwareIfAvailable(nowMs: Double, updateSide: Bool) {
         guard !hardwareMockMode else { return }
         do {
+            if !server.device.connected {
+                _ = try server.device.connect()
+            }
             if !rpcSession.hasActiveSlots {
-                if server.device.connected {
-                    syncActiveFunctionKeys()
-                    if server.device.armed && server.device.recoveryPending {
-                        _ = try? server.device.restore()
-                    }
-                    reportTransportIfChanged(
-                        mode: server.device.transportMode.lowercased(),
-                        model: server.device.modelName,
-                        vendorId: 0x19f5,
-                        productId: server.device.productId,
-                        rgb: true,
-                        keys: true,
-                        ledBlink: false,
-                        wireless: server.device.isDongle
-                    )
-                } else if !BluetoothKeyboard.identities().isEmpty {
-                    reportTransportIfChanged(
-                        mode: "bluetooth",
-                        model: "Air75 V3",
-                        vendorId: 2007,
-                        productId: 0,
-                        rgb: false,
-                        keys: true,
-                        ledBlink: true,
-                        wireless: true
-                    )
-                    syncBluetoothFallbackLED(nowMs: nowMs)
+                syncActiveFunctionKeys()
+                if server.device.armed && server.device.recoveryPending {
+                    _ = try? server.device.restore()
                 }
+                reportTransportIfChanged(
+                    mode: server.device.transportMode.lowercased(),
+                    model: server.device.modelName,
+                    vendorId: 0x19f5,
+                    productId: server.device.productId,
+                    rgb: true,
+                    keys: true,
+                    ledBlink: false,
+                    wireless: server.device.isDongle
+                )
                 return
             }
             _ = try rpcSession.syncToDevice(
@@ -2412,8 +2414,8 @@ final class DshWebSocketDaemon: @unchecked Sendable {
                 wireless: server.device.isDongle
             )
             syncActiveFunctionKeys()
-        } catch let error as BridgeError where error.code == "DEVICE_NOT_FOUND" {
-            // Hardware not currently plugged in over USB or 2.4G dongle; check Bluetooth fallback.
+        } catch let error as BridgeError where ["DEVICE_NOT_FOUND", "HID_TIMEOUT", "INVALID_REPLY", "IOKIT_READ_TIMEOUT", "DISCONNECTED", "NOT_CONNECTED"].contains(error.code) {
+            // Hardware not currently reachable over USB or 2.4G dongle; check Bluetooth fallback.
             if !BluetoothKeyboard.identities().isEmpty {
                 reportTransportIfChanged(
                     mode: "bluetooth",
@@ -2427,15 +2429,16 @@ final class DshWebSocketDaemon: @unchecked Sendable {
                 )
                 syncBluetoothFallbackLED(nowMs: nowMs)
             } else {
+                let isDonglePresent = server.device.isDongle
                 reportTransportIfChanged(
                     mode: "disconnected",
-                    model: nil,
-                    vendorId: nil,
-                    productId: nil,
+                    model: isDonglePresent ? "Air75 V3 Dongle" : nil,
+                    vendorId: isDonglePresent ? 0x19f5 : nil,
+                    productId: isDonglePresent ? server.device.productId : nil,
                     rgb: false,
                     keys: false,
                     ledBlink: false,
-                    wireless: false
+                    wireless: isDonglePresent
                 )
             }
         } catch {
