@@ -749,7 +749,7 @@ describe('DSH Client Companion Plugin (client.ts)', () => {
     const styleNode = renderedElements.find((el) => el.type === 'style');
     const css = String(styleNode?.children?.[0] ?? '');
     const stageRule = /#stage\.air75-stage \{([\s\S]*?)\}/.exec(css)?.[1] ?? '';
-    expect(stageRule).toContain('padding: 30px');;
+    expect(stageRule).toContain('padding: 30px');
     expect(stageRule).toContain('border-radius: 20px');
     expect(stageRule).toContain('box-shadow: 0 20px 40px rgba(0,0,0,0.08)');
 
@@ -760,6 +760,54 @@ describe('DSH Client Companion Plugin (client.ts)', () => {
     expect(legendNodes.some((el) => el.children?.[0] === 'ESC')).toBe(true);
     expect(legendNodes.some((el) => String(el.children?.[0]).includes('✓'))).toBe(false);
     expect(legendNodes.some((el) => String(el.children?.[0]).includes('✕'))).toBe(false);
+
+    // 11. Status theming keeps the reference cap anatomy and adds a status LED.
+    const capParts = (id: string) => {
+      const node = keyNodes.find((el) => el.props?.id === id);
+      expect(node, `${id} must render`).toBeDefined();
+      const inner = node!.children[0];
+      return {
+        outer: node!,
+        bg: inner.children[0],
+        wireframe: inner.children[1],
+        box: inner.children[2],
+      };
+    };
+
+    const f2Cap = capParts('key-KC_F2');
+    expect(f2Cap.bg.props.style.backgroundColor).toBe('#f2f9ff');
+    expect(f2Cap.bg.props.style.boxShadow).toContain('rgba(2, 132, 199');
+    expect(
+      f2Cap.wireframe.children.map((el: any) => el.props.style.backgroundColor)
+    ).toEqual(['#1d1d1f', '#1d1d1f', '#1d1d1f']);
+    const f2Led = f2Cap.box.children[1];
+    expect(f2Led?.props?.className).toBe('key-led');
+    expect(f2Led?.props?.style?.color).toBe('#0284c7');
+
+    // Focused NEEDS_INPUT slot: pale amber cap plus the brand focus ring.
+    const f1Cap = capParts('key-KC_F1');
+    expect(f1Cap.bg.props.style.backgroundColor).toBe('#fff8eb');
+    expect(f1Cap.box.children[1]?.props?.style?.color).toBe('#f59e0b');
+    expect(String(f1Cap.outer.props.style.boxShadow)).toContain('0 0 0 2.5px');
+
+    // Unassigned key keeps the reference white cap and ink wireframe.
+    const qCap = capParts('key-KC_Q');
+    expect(qCap.bg.props.style.backgroundColor).toBe('#fbfbfd');
+    expect(qCap.wireframe.children[0].props.style.backgroundColor).toBe('#1d1d1f');
+    expect(qCap.box.children[1] ?? null).toBeNull();
+
+    // Approval shortcuts are tinted while the focused slot waits for input.
+    const enterCap = capParts('key-KC_ENTER');
+    expect(enterCap.bg.props.style.backgroundColor).toBe('#f0fdf4');
+    const key1Cap = capParts('key-KC_1');
+    expect(key1Cap.bg.props.style.backgroundColor).toBe('#f0fdf4');
+    const escCap = capParts('key-KC_ESC');
+    expect(escCap.bg.props.style.backgroundColor).toBe('#fff1f2');
+
+    // Default state: no LED and no action tint.
+    const defaultCap = capParts('key-KC_F3');
+    expect(defaultCap.bg.props.style.backgroundColor).toBe('#fbfbfd');
+    expect(defaultCap.box.children[1] ?? null).toBeNull();
 
     if (typeof cleanup === 'function') cleanup();
   });

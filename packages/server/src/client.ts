@@ -193,6 +193,75 @@ const AIR75_CAP_MASKS = {
   right: air75CapMask(AIR75_WIREFRAME_PATHS.right),
 };
 
+interface KeycapTheme {
+  background: string;
+  glow: string;
+  /** Status LED inside the cap; omitted for inactive slots. */
+  led?: string;
+}
+
+/** Reference ink used by every keycap wireframe. */
+const AIR75_KEYCAP_INK = '#1d1d1f';
+/** Reference legend color used by every keycap label. */
+const AIR75_KEYCAP_LABEL = 'rgba(29, 29, 31, 0.92)';
+
+/**
+ * Reference keycap treatment: white cap, near-black wireframe and legend.
+ * Slot status keeps that anatomy and only adds a pale wash, a soft glow and a
+ * small status LED, so the keyboard still reads as the line-art renderer.
+ */
+const AIR75_KEYCAP_THEME: KeycapTheme = {
+  background: '#fbfbfd',
+  glow: '0 1px 2px rgba(0,0,0,0.06)',
+};
+
+const AIR75_STATUS_THEMES: Record<string, KeycapTheme> = {
+  INACTIVE: AIR75_KEYCAP_THEME,
+  IDLE: {
+    background: '#f8fafc',
+    glow: '0 1px 2px rgba(0,0,0,0.06)',
+    led: '#94a3b8',
+  },
+  RUNNING: {
+    background: '#f2f9ff',
+    glow: '0 0 12px rgba(2, 132, 199, 0.22)',
+    led: '#0284c7',
+  },
+  NEEDS_INPUT: {
+    background: '#fff8eb',
+    glow: '0 0 14px rgba(245, 158, 11, 0.32)',
+    led: '#f59e0b',
+  },
+  COMPLETED: {
+    background: '#f0fdf6',
+    glow: '0 0 10px rgba(16, 185, 129, 0.22)',
+    led: '#10b981',
+  },
+  ERROR: {
+    background: '#fff1f2',
+    glow: '0 0 12px rgba(225, 29, 72, 0.28)',
+    led: '#e11d48',
+  },
+};
+
+const AIR75_ACTION_THEMES = {
+  ACCEPT: {
+    background: '#f0fdf4',
+    glow: '0 0 14px rgba(22, 163, 74, 0.36)',
+    led: '#16a34a',
+  },
+  REJECT: {
+    background: '#fff1f2',
+    glow: '0 0 14px rgba(220, 38, 38, 0.36)',
+    led: '#dc2626',
+  },
+  ALWAYS_ALLOW: {
+    background: '#f5f3ff',
+    glow: '0 0 14px rgba(124, 58, 237, 0.32)',
+    led: '#7c3aed',
+  },
+} as const satisfies Record<string, KeycapTheme>;
+
 const AIR75_CSS = `
   .air75-scroll-container {
     width: 100%;
@@ -324,6 +393,19 @@ const AIR75_CSS = `
     font-weight: 700;
     color: rgba(29, 29, 31, 0.92);
   }
+  .key-led {
+    position: absolute;
+    left: 50%;
+    bottom: 7px;
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background-color: currentColor;
+    transform: translateX(-50%);
+    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.85), 0 0 6px currentColor;
+    z-index: 4;
+    pointer-events: none;
+  }
   .roller-container {
     position: absolute;
     display: flex;
@@ -336,10 +418,6 @@ const AIR75_CSS = `
     height: 48px;
     object-fit: contain;
     filter: drop-shadow(0 1px 2px rgba(0,0,0,0.15));
-  }
-  @keyframes air75-pulse {
-    0% { transform: scale(1); filter: brightness(1); }
-    100% { transform: scale(1.02); filter: brightness(1.15); }
   }
 `;
 
@@ -1252,55 +1330,20 @@ if (win?.__ModuleLoader__) {
                         onClickHandler = () => sendSelectOption(currentFocusedSlot, 2, 'ALWAYS_ALLOW');
                       }
 
-                      // Keycap visual theme
-                      let keyBgColor = '#fbfbfd';
-                      let keyBgShadow = '0 1px 2px rgba(0,0,0,0.06)';
-                      let wireframeColor = '#1d1d1f';
-                      let textColor = 'rgba(29, 29, 31, 0.92)';
-
-                      if (isFKey) {
-                        if (slotStatus === 'RUNNING') {
-                          keyBgColor = '#e0f2fe';
-                          keyBgShadow = '0 0 10px rgba(56, 189, 248, 0.55)';
-                          wireframeColor = '#0284c7';
-                          textColor = '#0369a1';
-                        } else if (slotStatus === 'NEEDS_INPUT') {
-                          keyBgColor = '#fef3c7';
-                          keyBgShadow = '0 0 12px rgba(245, 158, 11, 0.65)';
-                          wireframeColor = '#d97706';
-                          textColor = '#b45309';
-                        } else if (slotStatus === 'COMPLETED') {
-                          keyBgColor = '#d1fae5';
-                          keyBgShadow = '0 0 8px rgba(16, 185, 129, 0.45)';
-                          wireframeColor = '#059669';
-                          textColor = '#047857';
-                        } else if (slotStatus === 'ERROR') {
-                          keyBgColor = '#fee2e2';
-                          keyBgShadow = '0 0 10px rgba(239, 68, 68, 0.55)';
-                          wireframeColor = '#dc2626';
-                          textColor = '#b91c1c';
-                        } else if (slotStatus === 'IDLE') {
-                          keyBgColor = '#f1f5f9';
-                          wireframeColor = '#64748b';
-                        }
-                      }
-
+                      // Keycap visual theme: the reference line-art cap, with the
+                      // slot status expressed as a pale wash, a soft glow and a small
+                      // status LED instead of a solid color block.
+                      let keyTheme: KeycapTheme = isFKey
+                        ? AIR75_STATUS_THEMES[slotStatus] ?? AIR75_KEYCAP_THEME
+                        : AIR75_KEYCAP_THEME;
                       if (isAcceptKey) {
-                        keyBgColor = '#dcfce7';
-                        keyBgShadow = '0 0 12px rgba(16, 185, 129, 0.7)';
-                        wireframeColor = '#16a34a';
-                        textColor = '#15803d';
+                        keyTheme = AIR75_ACTION_THEMES.ACCEPT;
                       } else if (isRejectKey) {
-                        keyBgColor = '#fee2e2';
-                        keyBgShadow = '0 0 12px rgba(239, 68, 68, 0.7)';
-                        wireframeColor = '#dc2626';
-                        textColor = '#b91c1c';
+                        keyTheme = AIR75_ACTION_THEMES.REJECT;
                       } else if (isAlwaysAllowKey) {
-                        keyBgColor = '#ede9fe';
-                        keyBgShadow = '0 0 10px rgba(147, 51, 234, 0.6)';
-                        wireframeColor = '#9333ea';
-                        textColor = '#7e22ce';
+                        keyTheme = AIR75_ACTION_THEMES.ALWAYS_ALLOW;
                       }
+                      const ledColor = keyTheme.led ?? null;
 
                       const outerStyle: any = {
                         left: `${key.left}px`,
@@ -1332,7 +1375,7 @@ if (win?.__ModuleLoader__) {
                           h('span', { className: 'key-top' }, key.topLabel),
                           h(
                             'span',
-                            { className: 'key-sub', style: { color: textColor } },
+                            { className: 'key-sub', style: { color: AIR75_KEYCAP_LABEL } },
                             key.subLabel
                           )
                         );
@@ -1342,7 +1385,7 @@ if (win?.__ModuleLoader__) {
                           {
                             style: {
                               fontSize: `${key.labelSize ?? 11}px`,
-                              color: textColor,
+                              color: AIR75_KEYCAP_LABEL,
                               margin: 0,
                             },
                           },
@@ -1367,8 +1410,8 @@ if (win?.__ModuleLoader__) {
                           h('div', {
                             className: 'keyCapBg',
                             style: {
-                              backgroundColor: keyBgColor,
-                              boxShadow: keyBgShadow,
+                              backgroundColor: keyTheme.background,
+                              boxShadow: keyTheme.glow,
                             },
                           }),
                           h(
@@ -1376,18 +1419,29 @@ if (win?.__ModuleLoader__) {
                             { className: 'wireframeBac' },
                             h('div', {
                               className: 'cap-left',
-                              style: { backgroundColor: wireframeColor },
+                              style: { backgroundColor: AIR75_KEYCAP_INK },
                             }),
                             h('div', {
                               className: 'cap-middle',
-                              style: { backgroundColor: wireframeColor },
+                              style: { backgroundColor: AIR75_KEYCAP_INK },
                             }),
                             h('div', {
                               className: 'cap-right',
-                              style: { backgroundColor: wireframeColor },
+                              style: { backgroundColor: AIR75_KEYCAP_INK },
                             })
                           ),
-                          h('div', { className: 'boxBac' }, keyContent)
+                          h(
+                            'div',
+                            { className: 'boxBac' },
+                            keyContent,
+                            ledColor
+                              ? h('span', {
+                                  className: 'key-led',
+                                  'data-status': slotStatus,
+                                  style: { color: ledColor },
+                                })
+                              : null
+                          )
                         )
                       );
                     }),
