@@ -604,7 +604,7 @@ describe('DSH Client Companion Plugin (client.ts)', () => {
     expect(f2Sent.method).toBe('peripheral/switchFocus');
     expect(f2Sent.params.slotIndex).toBe(2);
 
-    // 5. In Slot 1 (NEEDS_INPUT), check that clicking the virtual Enter key approves
+    // 5. In Slot 1 (NEEDS_INPUT), check that clicking virtual Enter key approves
     const enterNode = keyNodes.find(
       (el) => el.props && (el.props.id === 'key-KC_ENTER' || el.props.key === 'key-KC_ENTER')
     );
@@ -614,6 +614,50 @@ describe('DSH Client Companion Plugin (client.ts)', () => {
     const enterSent = JSON.parse(capturedWs.send.mock.calls.at(-1)[0]);
     expect(enterSent.method).toBe('peripheral/selectOption');
     expect(enterSent.params.action).toBe('ACCEPT');
+
+    // 6. In Slot 1 (NEEDS_INPUT), check that clicking virtual Esc key rejects
+    const escNode = keyNodes.find(
+      (el) => el.props && (el.props.id === 'key-KC_ESC' || el.props.key === 'key-KC_ESC')
+    );
+    expect(escNode).toBeDefined();
+    escNode?.props?.onClick();
+
+    const escSent = JSON.parse(capturedWs.send.mock.calls.at(-1)[0]);
+    expect(escSent.method).toBe('peripheral/selectOption');
+    expect(escSent.params.action).toBe('REJECT');
+
+    // 7. In Slot 1 (NEEDS_INPUT), check that clicking virtual 3 key allows always
+    const key3Node = keyNodes.find(
+      (el) => el.props && (el.props.id === 'key-KC_3' || el.props.key === 'key-KC_3')
+    );
+    expect(key3Node).toBeDefined();
+    key3Node?.props?.onClick();
+
+    const key3Sent = JSON.parse(capturedWs.send.mock.calls.at(-1)[0]);
+    expect(key3Sent.method).toBe('peripheral/selectOption');
+    expect(key3Sent.params.action).toBe('ALWAYS_ALLOW');
+
+    // 8. Verify hover handlers on F-key nodes
+    const f1Node = keyNodes.find(
+      (el) => el.props && (el.props.id === 'key-KC_F1' || el.props.key === 'key-KC_F1')
+    );
+    expect(f1Node).toBeDefined();
+    expect(typeof f1Node?.props?.onMouseEnter).toBe('function');
+    expect(typeof f1Node?.props?.onMouseLeave).toBe('function');
+
+    // 9. Verify exact wireframe sub-elements inside keycap
+    const wireframeSubNodes = renderedElements.filter(
+      (el) =>
+        el.type === 'div' &&
+        el.props &&
+        (el.props.className === 'keyCapBg' ||
+          el.props.className === 'wireframeBac' ||
+          el.props.className === 'cap-left' ||
+          el.props.className === 'cap-middle' ||
+          el.props.className === 'cap-right' ||
+          el.props.className === 'boxBac')
+    );
+    expect(wireframeSubNodes.length).toBeGreaterThan(0);
 
     if (typeof cleanup === 'function') cleanup();
   });
