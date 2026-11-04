@@ -809,6 +809,13 @@ describe('DSH Client Companion Plugin (client.ts)', () => {
     expect(defaultCap.bg.props.style.backgroundColor).toBe('#fbfbfd');
     expect(defaultCap.box.children[1] ?? null).toBeNull();
 
+    // 12. Centering must not clip the left edge inside a narrow panel.
+    const scrollRule = /\.air75-scroll-container \{([\s\S]*?)\}/.exec(css)?.[1] ?? '';
+    expect(scrollRule).toContain('overflow-x: auto');
+    expect(scrollRule).toContain('text-align: center');
+    expect(scrollRule).not.toContain('justify-content: center');
+
     if (typeof cleanup === 'function') cleanup();
   });
 });
+

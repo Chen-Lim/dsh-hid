@@ -266,8 +266,7 @@ const AIR75_CSS = `
   .air75-scroll-container {
     width: 100%;
     overflow-x: auto;
-    display: flex;
-    justify-content: center;
+    text-align: center;
     padding: 6px 0;
   }
   #stage.air75-stage {
