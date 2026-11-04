@@ -263,6 +263,63 @@ const AIR75_ACTION_THEMES = {
 } as const satisfies Record<string, KeycapTheme>;
 
 const AIR75_CSS = `
+  .peripheral-page {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: 100%;
+    height: 100%;
+    min-width: 0;
+    min-height: 0;
+    overflow: auto;
+    scrollbar-gutter: stable;
+    padding: 0 clamp(24px, 4vw, 48px) 48px;
+    color: var(--dsw-alias-label-primary);
+    background: var(--dsw-alias-bg-base);
+    box-sizing: border-box;
+  }
+  .peripheral-page-content {
+    width: 100%;
+    max-width: 960px;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    box-sizing: border-box;
+  }
+  .peripheral-page-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px 16px;
+    padding-top: 28px;
+    margin-bottom: 20px;
+    box-sizing: border-box;
+  }
+  [data-platform='darwin'] .peripheral-page-head {
+    padding-top: calc(28px + var(--dsh-frame-top-clearance, 0px));
+  }
+  .peripheral-slot-grid {
+    display: grid;
+    grid-template-columns: 52px minmax(96px, 140px) minmax(96px, 130px) minmax(120px, 1fr) minmax(110px, 160px);
+    align-items: center;
+    gap: 12px;
+    min-width: 0;
+  }
+  @media (max-width: 720px) {
+    .peripheral-slot-grid {
+      grid-template-columns: 46px minmax(80px, 110px) minmax(88px, 112px) minmax(80px, 1fr) auto;
+      gap: 8px;
+    }
+  }
+  @media (max-width: 540px) {
+    .peripheral-slot-grid {
+      grid-template-columns: 44px minmax(72px, 1fr) minmax(84px, auto) auto;
+    }
+    .peripheral-slot-grid .peripheral-col-tool {
+      display: none;
+    }
+  }
   .air75-scroll-container {
     width: 100%;
     overflow-x: auto;
@@ -973,6 +1030,7 @@ if (win?.__ModuleLoader__) {
                 key: slot.slotIndex,
                 role: 'button',
                 tabIndex: 0,
+                className: 'peripheral-slot-grid peripheral-slot-row',
                 onMouseEnter: () => setHoveredSlot(slot.slotIndex),
                 onMouseLeave: () => setHoveredSlot(null),
                 onClick: () => sendSwitchFocus(slot.slotIndex),
@@ -983,10 +1041,6 @@ if (win?.__ModuleLoader__) {
                   }
                 },
                 style: {
-                  display: 'grid',
-                  gridTemplateColumns: '52px 140px 130px 1fr 160px',
-                  alignItems: 'center',
-                  gap: '12px',
                   padding: '9px 14px',
                   borderTop: slot.slotIndex === 1 ? 'none' : '1px solid var(--dsw-alias-border-l1)',
                   borderLeft: focused
@@ -1075,6 +1129,7 @@ if (win?.__ModuleLoader__) {
               h(
                 'span',
                 {
+                  className: 'peripheral-col-tool',
                   style: {
                     fontSize: '12px',
                     color: 'var(--dsw-alias-label-secondary)',
@@ -1566,143 +1621,162 @@ if (win?.__ModuleLoader__) {
             return h(
               'div',
               {
-                style: {
-                  height: '100%',
-                  overflow: 'auto',
-                  padding: '24px 28px',
-                  color: 'var(--dsw-alias-label-primary)',
-                  background: 'var(--dsw-alias-bg-base)',
-                  boxSizing: 'border-box',
-                },
+                className: 'peripheral-page',
               },
-              // Top Header
               h(
                 'div',
                 {
-                  style: {
-                    display: 'flex',
-                    alignItems: 'baseline',
-                    gap: '10px',
-                    marginBottom: '6px',
-                  },
+                  className: 'peripheral-page-content',
                 },
-                h('h1', { style: { margin: 0, fontSize: '16px', fontWeight: 600 } }, t('title')),
+                // Top Header (matches DSH native PluginManagerPage / TaskManagerPage head)
                 h(
-                  'span',
+                  'div',
                   {
-                    style: {
-                      fontSize: '12px',
-                      color: current.connected
-                        ? 'var(--dsw-alias-state-success-primary)'
-                        : 'var(--dsw-alias-label-secondary)',
-                    },
+                    className: 'peripheral-page-head',
                   },
-                  current.connected ? t('connected') : t('disconnected')
-                ),
-                badgeText
-                  ? h(
-                      'span',
+                  h(
+                    'div',
+                    { style: { minWidth: 0, maxWidth: '100%' } },
+                    h(
+                      'div',
                       {
-                        'data-testid': 'peripheral-transport-badge',
                         style: {
-                          fontSize: '11px',
-                          padding: '2px 8px',
-                          borderRadius: '999px',
-                          border: '1px solid var(--dsw-alias-border-l1)',
-                          background: 'var(--dsw-alias-bg-layer-1)',
-                          color: isBluetoothFallback
-                            ? 'var(--dsw-alias-state-warn-primary)'
-                            : 'var(--dsw-alias-label-secondary)',
+                          display: 'flex',
+                          flexWrap: 'wrap',
+                          alignItems: 'center',
+                          gap: '10px',
                         },
                       },
-                      current.transportState?.model
-                        ? `${current.transportState.model} · ${badgeText}`
-                        : badgeText
-                    )
-                  : null
-              ),
-              h(
-                'p',
-                {
-                  style: {
-                    margin: '0 0 16px',
-                    fontSize: '12px',
-                    color: 'var(--dsw-alias-label-secondary)',
-                  },
-                },
-                t('subtitle')
-              ),
-              isBluetoothFallback
-                ? h(
-                    'div',
-                    {
-                      role: 'status',
-                      'data-testid': 'peripheral-bluetooth-notice',
-                      style: {
-                        margin: '0 0 14px',
-                        padding: '10px 12px',
-                        borderRadius: '6px',
-                        border: '1px solid var(--dsw-alias-state-warn-primary)',
-                        background: 'var(--dsw-alias-bg-layer-1)',
-                        fontSize: '12px',
-                        lineHeight: 1.5,
-                        color: 'var(--dsw-alias-label-primary)',
+                      h(
+                        'h1',
+                        {
+                          style: {
+                            margin: 0,
+                            fontSize: '20px',
+                            lineHeight: '28px',
+                            fontWeight: 500,
+                          },
+                        },
+                        t('title')
+                      ),
+                      h(
+                        'span',
+                        {
+                          style: {
+                            fontSize: '12px',
+                            color: current.connected
+                              ? 'var(--dsw-alias-state-success-primary)'
+                              : 'var(--dsw-alias-label-secondary)',
+                          },
+                        },
+                        current.connected ? t('connected') : t('disconnected')
+                      ),
+                      badgeText
+                        ? h(
+                            'span',
+                            {
+                              'data-testid': 'peripheral-transport-badge',
+                              style: {
+                                fontSize: '11px',
+                                padding: '2px 8px',
+                                borderRadius: '999px',
+                                border: '1px solid var(--dsw-alias-border-l1)',
+                                background: 'var(--dsw-alias-bg-layer-1)',
+                                color: isBluetoothFallback
+                                  ? 'var(--dsw-alias-state-warn-primary)'
+                                  : 'var(--dsw-alias-label-secondary)',
+                              },
+                            },
+                            current.transportState?.model
+                              ? `${current.transportState.model} · ${badgeText}`
+                              : badgeText
+                          )
+                        : null
+                    ),
+                    h(
+                      'p',
+                      {
+                        style: {
+                          margin: '4px 0 0',
+                          fontSize: '13px',
+                          lineHeight: '20px',
+                          color: 'var(--dsw-alias-label-secondary)',
+                        },
                       },
-                    },
-                    t('bluetoothNotice')
+                      t('subtitle')
+                    )
                   )
-                : null,
-              // Upper Half: Slot Status Table
-              h(
-                'div',
-                {
-                  style: {
-                    border: '1px solid var(--dsw-alias-border-l1)',
-                    borderRadius: '8px',
-                    overflow: 'hidden',
-                  },
-                },
+                ),
+                isBluetoothFallback
+                  ? h(
+                      'div',
+                      {
+                        role: 'status',
+                        'data-testid': 'peripheral-bluetooth-notice',
+                        style: {
+                          margin: '0 0 14px',
+                          padding: '10px 12px',
+                          borderRadius: '8px',
+                          border: '1px solid var(--dsw-alias-state-warn-primary)',
+                          background: 'var(--dsw-alias-bg-layer-1)',
+                          fontSize: '12px',
+                          lineHeight: 1.5,
+                          color: 'var(--dsw-alias-label-primary)',
+                        },
+                      },
+                      t('bluetoothNotice')
+                    )
+                  : null,
+                // Upper Half: Slot Status Table
                 h(
                   'div',
                   {
                     style: {
-                      display: 'grid',
-                      gridTemplateColumns: '52px 140px 130px 1fr 160px',
-                      gap: '12px',
-                      padding: '8px 14px',
-                      fontSize: '11px',
-                      textTransform: 'uppercase',
-                      letterSpacing: '0.04em',
-                      color: 'var(--dsw-alias-label-secondary)',
-                      background: 'var(--dsw-alias-bg-layer-1)',
-                      borderBottom: '1px solid var(--dsw-alias-border-l1)',
+                      border: '1px solid var(--dsw-alias-border-l1)',
+                      borderRadius: '10px',
+                      overflow: 'hidden',
                     },
                   },
-                  h('span', null, t('slot')),
-                  h('span', null, t('session')),
-                  h('span', null, t('status')),
-                  h('span', null, t('tool')),
-                  h('span', null, t('quickActions'))
-                ),
-                rows.map((row) =>
-                  renderSlotRow(row, current, hoveredSlot, setHoveredSlot)
-                )
-              ),
-              // Lower Half: Interactive NuPhy Air75 V3 Physical Keyboard Visualizer
-              renderKeyboardVisualization(current, hoveredSlot, setHoveredSlot),
-              current.lastError
-                ? h(
-                    'p',
+                  h(
+                    'div',
                     {
+                      className: 'peripheral-slot-grid peripheral-slot-header',
                       style: {
-                        margin: '12px 0 0',
-                        fontSize: '12px',
-                        color: 'var(--dsw-alias-state-error-primary)',
+                        padding: '8px 14px',
+                        fontSize: '11px',
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.04em',
+                        color: 'var(--dsw-alias-label-secondary)',
+                        background: 'var(--dsw-alias-bg-layer-1)',
+                        borderBottom: '1px solid var(--dsw-alias-border-l1)',
                       },
                     },
-                    t('error')
+                    h('span', null, t('slot')),
+                    h('span', null, t('session')),
+                    h('span', null, t('status')),
+                    h('span', { className: 'peripheral-col-tool' }, t('tool')),
+                    h('span', null, t('quickActions'))
+                  ),
+                  rows.map((row) =>
+                    renderSlotRow(row, current, hoveredSlot, setHoveredSlot)
                   )
-                : null
+                ),
+                // Lower Half: Interactive NuPhy Air75 V3 Physical Keyboard Visualizer
+                renderKeyboardVisualization(current, hoveredSlot, setHoveredSlot),
+                current.lastError
+                  ? h(
+                      'p',
+                      {
+                        style: {
+                          margin: '12px 0 0',
+                          fontSize: '12px',
+                          color: 'var(--dsw-alias-state-error-primary)',
+                        },
+                      },
+                      t('error')
+                    )
+                  : null
+              )
             );
           }
 

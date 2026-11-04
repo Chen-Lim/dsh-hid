@@ -820,6 +820,21 @@ describe('DSH Client Companion Plugin (client.ts)', () => {
     expect(scrollRule).toContain('text-align: center');
     expect(scrollRule).not.toContain('justify-content: center');
 
+    // 13. Page container matches DSH native first-level pages (960px max-width, clamp inline padding, darwin clearance).
+    const pageNode = renderedElements.find(
+      (el) => el.type === 'div' && el.props?.className === 'peripheral-page'
+    );
+    expect(pageNode).toBeDefined();
+    const contentNode = renderedElements.find(
+      (el) => el.type === 'div' && el.props?.className === 'peripheral-page-content'
+    );
+    expect(contentNode).toBeDefined();
+    const pageRule = /\.peripheral-page \{([\s\S]*?)\}/.exec(css)?.[1] ?? '';
+    expect(pageRule).toContain('padding: 0 clamp(24px, 4vw, 48px) 48px');
+    const contentRule = /\.peripheral-page-content \{([\s\S]*?)\}/.exec(css)?.[1] ?? '';
+    expect(contentRule).toContain('max-width: 960px');
+    expect(css).toContain("[data-platform='darwin'] .peripheral-page-head");
+
     if (typeof cleanup === 'function') cleanup();
   });
 });
