@@ -1,0 +1,1369 @@
+{
+  "keyboard": "NuPhy Node75",
+  "aspectRatio": {
+    "width": 960,
+    "height": 413.5
+  },
+  "keyWidth": 55.2,
+  "skewX": 0.41,
+  "skewY": 0.89,
+  "keys": [
+    {
+      "name": "ESC",
+      "keyCode": 0,
+      "x": 0,
+      "y": 0,
+      "w": 1,
+      "label": "ESC",
+      "calc": {
+        "x": 0.41,
+        "y": 0.89,
+        "left_px": 22.63,
+        "top_px": 49.13,
+        "width_px": 55.2,
+        "height_px": 55.2
+      }
+    },
+    {
+      "name": "F1",
+      "keyCode": 1,
+      "x": 1,
+      "y": 0,
+      "w": 1,
+      "label": "F14",
+      "calc": {
+        "x": 1.45,
+        "y": 0.89,
+        "left_px": 80.04,
+        "top_px": 49.13,
+        "width_px": 55.2,
+        "height_px": 55.2
+      }
+    },
+    {
+      "name": "F2",
+      "keyCode": 2,
+      "x": 2,
+      "y": 0,
+      "w": 1,
+      "label": "F15",
+      "calc": {
+        "x": 2.49,
+        "y": 0.89,
+        "left_px": 137.45,
+        "top_px": 49.13,
+        "width_px": 55.2,
+        "height_px": 55.2
+      }
+    },
+    {
+      "name": "F3",
+      "keyCode": 3,
+      "x": 3,
+      "y": 0,
+      "w": 1,
+      "label": "⧉",
+      "calc": {
+        "x": 3.53,
+        "y": 0.89,
+        "left_px": 194.86,
+        "top_px": 49.13,
+        "width_px": 55.2,
+        "height_px": 55.2
+      }
+    },
+    {
+      "name": "F4",
+      "keyCode": 4,
+      "x": 4,
+      "y": 0,
+      "w": 1,
+      "label": "🔍",
+      "calc": {
+        "x": 4.57,
+        "y": 0.89,
+        "left_px": 252.26,
+        "top_px": 49.13,
+        "width_px": 55.2,
+        "height_px": 55.2
+      }
+    },
+    {
+      "name": "F5",
+      "keyCode": 5,
+      "x": 5,
+      "y": 0,
+      "w": 1,
+      "label": "🎤",
+      "calc": {
+        "x": 5.61,
+        "y": 0.89,
+        "left_px": 309.67,
+        "top_px": 49.13,
+        "width_px": 55.2,
+        "height_px": 55.2
+      }
+    },
+    {
+      "name": "F6",
+      "keyCode": 6,
+      "x": 6,
+      "y": 0,
+      "w": 1,
+      "label": "☾",
+      "calc": {
+        "x": 6.65,
+        "y": 0.89,
+        "left_px": 367.08,
+        "top_px": 49.13,
+        "width_px": 55.2,
+        "height_px": 55.2
+      }
+    },
+    {
+      "name": "F7",
+      "keyCode": 7,
+      "x": 7,
+      "y": 0,
+      "w": 1,
+      "label": "∞",
+      "calc": {
+        "x": 7.69,
+        "y": 0.89,
+        "left_px": 424.49,
+        "top_px": 49.13,
+        "width_px": 55.2,
+        "height_px": 55.2
+      }
+    },
+    {
+      "name": "F8",
+      "keyCode": 8,
+      "x": 8,
+      "y": 0,
+      "w": 1,
+      "label": "⏯",
+      "calc": {
+        "x": 8.73,
+        "y": 0.89,
+        "left_px": 481.9,
+        "top_px": 49.13,
+        "width_px": 55.2,
+        "height_px": 55.2
+      }
+    },
+    {
+      "name": "F9",
+      "keyCode": 9,
+      "x": 9,
+      "y": 0,
+      "w": 1,
+      "label": "⏮",
+      "calc": {
+        "x": 9.77,
+        "y": 0.89,
+        "left_px": 539.3,
+        "top_px": 49.13,
+        "width_px": 55.2,
+        "height_px": 55.2
+      }
+    },
+    {
+      "name": "F10",
+      "keyCode": 10,
+      "x": 10,
+      "y": 0,
+      "w": 1,
+      "label": "⏭",
+      "calc": {
+        "x": 10.81,
+        "y": 0.89,
+        "left_px": 596.71,
+        "top_px": 49.13,
+        "width_px": 55.2,
+        "height_px": 55.2
+      }
+    },
+    {
+      "name": "F11",
+      "keyCode": 11,
+      "x": 11,
+      "y": 0,
+      "w": 1,
+      "label": "🔈",
+      "calc": {
+        "x": 11.85,
+        "y": 0.89,
+        "left_px": 654.12,
+        "top_px": 49.13,
+        "width_px": 55.2,
+        "height_px": 55.2
+      }
+    },
+    {
+      "name": "F12",
+      "keyCode": 12,
+      "x": 12,
+      "y": 0,
+      "w": 1,
+      "label": "🔊",
+      "calc": {
+        "x": 12.89,
+        "y": 0.89,
+        "left_px": 711.53,
+        "top_px": 49.13,
+        "width_px": 55.2,
+        "height_px": 55.2
+      }
+    },
+    {
+      "name": "SCREENSHOT",
+      "keyCode": 13,
+      "x": 13,
+      "y": 0,
+      "w": 1,
+      "label": "MAC...",
+      "calc": {
+        "x": 13.93,
+        "y": 0.89,
+        "left_px": 768.94,
+        "top_px": 49.13,
+        "width_px": 55.2,
+        "height_px": 55.2
+      }
+    },
+    {
+      "name": "INSERT",
+      "keyCode": 14,
+      "x": 14,
+      "y": 0,
+      "w": 1,
+      "label": "INS",
+      "calc": {
+        "x": 14.97,
+        "y": 0.89,
+        "left_px": 826.34,
+        "top_px": 49.13,
+        "width_px": 55.2,
+        "height_px": 55.2
+      }
+    },
+    {
+      "name": "GRAVE",
+      "keyCode": 21,
+      "x": 0,
+      "y": 1.04,
+      "w": 1,
+      "top": "~",
+      "sub": "`",
+      "calc": {
+        "x": 0.41,
+        "y": 1.93,
+        "left_px": 22.63,
+        "top_px": 106.54,
+        "width_px": 55.2,
+        "height_px": 55.2
+      }
+    },
+    {
+      "name": "1",
+      "keyCode": 22,
+      "x": 1,
+      "y": 1.04,
+      "w": 1,
+      "top": "!",
+      "sub": "1",
+      "calc": {
+        "x": 1.45,
+        "y": 1.93,
+        "left_px": 80.04,
+        "top_px": 106.54,
+        "width_px": 55.2,
+        "height_px": 55.2
+      }
+    },
+    {
+      "name": "2",
+      "keyCode": 23,
+      "x": 2,
+      "y": 1.04,
+      "w": 1,
+      "top": "@",
+      "sub": "2",
+      "calc": {
+        "x": 2.49,
+        "y": 1.93,
+        "left_px": 137.45,
+        "top_px": 106.54,
+        "width_px": 55.2,
+        "height_px": 55.2
+      }
+    },
+    {
+      "name": "3",
+      "keyCode": 24,
+      "x": 3,
+      "y": 1.04,
+      "w": 1,
+      "top": "#",
+      "sub": "3",
+      "calc": {
+        "x": 3.53,
+        "y": 1.93,
+        "left_px": 194.86,
+        "top_px": 106.54,
+        "width_px": 55.2,
+        "height_px": 55.2
+      }
+    },
+    {
+      "name": "4",
+      "keyCode": 25,
+      "x": 4,
+      "y": 1.04,
+      "w": 1,
+      "top": "$",
+      "sub": "4",
+      "calc": {
+        "x": 4.57,
+        "y": 1.93,
+        "left_px": 252.26,
+        "top_px": 106.54,
+        "width_px": 55.2,
+        "height_px": 55.2
+      }
+    },
+    {
+      "name": "5",
+      "keyCode": 26,
+      "x": 5,
+      "y": 1.04,
+      "w": 1,
+      "top": "%",
+      "sub": "5",
+      "calc": {
+        "x": 5.61,
+        "y": 1.93,
+        "left_px": 309.67,
+        "top_px": 106.54,
+        "width_px": 55.2,
+        "height_px": 55.2
+      }
+    },
+    {
+      "name": "6",
+      "keyCode": 27,
+      "x": 6,
+      "y": 1.04,
+      "w": 1,
+      "top": "^",
+      "sub": "6",
+      "calc": {
+        "x": 6.65,
+        "y": 1.93,
+        "left_px": 367.08,
+        "top_px": 106.54,
+        "width_px": 55.2,
+        "height_px": 55.2
+      }
+    },
+    {
+      "name": "7",
+      "keyCode": 28,
+      "x": 7,
+      "y": 1.04,
+      "w": 1,
+      "top": "&",
+      "sub": "7",
+      "calc": {
+        "x": 7.69,
+        "y": 1.93,
+        "left_px": 424.49,
+        "top_px": 106.54,
+        "width_px": 55.2,
+        "height_px": 55.2
+      }
+    },
+    {
+      "name": "8",
+      "keyCode": 29,
+      "x": 8,
+      "y": 1.04,
+      "w": 1,
+      "top": "*",
+      "sub": "8",
+      "calc": {
+        "x": 8.73,
+        "y": 1.93,
+        "left_px": 481.9,
+        "top_px": 106.54,
+        "width_px": 55.2,
+        "height_px": 55.2
+      }
+    },
+    {
+      "name": "9",
+      "keyCode": 30,
+      "x": 9,
+      "y": 1.04,
+      "w": 1,
+      "top": "(",
+      "sub": "9",
+      "calc": {
+        "x": 9.77,
+        "y": 1.93,
+        "left_px": 539.3,
+        "top_px": 106.54,
+        "width_px": 55.2,
+        "height_px": 55.2
+      }
+    },
+    {
+      "name": "0",
+      "keyCode": 31,
+      "x": 10,
+      "y": 1.04,
+      "w": 1,
+      "top": ")",
+      "sub": "0",
+      "calc": {
+        "x": 10.81,
+        "y": 1.93,
+        "left_px": 596.71,
+        "top_px": 106.54,
+        "width_px": 55.2,
+        "height_px": 55.2
+      }
+    },
+    {
+      "name": "MINUS",
+      "keyCode": 32,
+      "x": 11,
+      "y": 1.04,
+      "w": 1,
+      "top": "_",
+      "sub": "-",
+      "calc": {
+        "x": 11.85,
+        "y": 1.93,
+        "left_px": 654.12,
+        "top_px": 106.54,
+        "width_px": 55.2,
+        "height_px": 55.2
+      }
+    },
+    {
+      "name": "EQUAL",
+      "keyCode": 33,
+      "x": 12,
+      "y": 1.04,
+      "w": 1,
+      "top": "+",
+      "sub": "=",
+      "calc": {
+        "x": 12.89,
+        "y": 1.93,
+        "left_px": 711.53,
+        "top_px": 106.54,
+        "width_px": 55.2,
+        "height_px": 55.2
+      }
+    },
+    {
+      "name": "BACKSPACE",
+      "keyCode": 34,
+      "x": 13,
+      "y": 1.04,
+      "w": 2,
+      "label": "BACKSPACE",
+      "calc": {
+        "x": 13.93,
+        "y": 1.93,
+        "left_px": 768.94,
+        "top_px": 106.54,
+        "width_px": 110.4,
+        "height_px": 55.2
+      }
+    },
+    {
+      "name": "PAGE_UP",
+      "keyCode": 35,
+      "x": 15,
+      "y": 1.04,
+      "w": 1,
+      "label": "PGUP",
+      "calc": {
+        "x": 15.97,
+        "y": 1.93,
+        "left_px": 881.54,
+        "top_px": 106.54,
+        "width_px": 55.2,
+        "height_px": 55.2
+      }
+    },
+    {
+      "name": "TAB",
+      "keyCode": 36,
+      "x": 0,
+      "y": 2.08,
+      "w": 1.5,
+      "label": "TAB",
+      "calc": {
+        "x": 0.41,
+        "y": 2.97,
+        "left_px": 22.63,
+        "top_px": 163.94,
+        "width_px": 82.8,
+        "height_px": 55.2
+      }
+    },
+    {
+      "name": "Q",
+      "keyCode": 37,
+      "x": 1.5,
+      "y": 2.08,
+      "w": 1,
+      "label": "Q",
+      "calc": {
+        "x": 1.95,
+        "y": 2.97,
+        "left_px": 107.64,
+        "top_px": 163.94,
+        "width_px": 55.2,
+        "height_px": 55.2
+      }
+    },
+    {
+      "name": "W",
+      "keyCode": 38,
+      "x": 2.5,
+      "y": 2.08,
+      "w": 1,
+      "label": "W",
+      "calc": {
+        "x": 2.99,
+        "y": 2.97,
+        "left_px": 165.05,
+        "top_px": 163.94,
+        "width_px": 55.2,
+        "height_px": 55.2
+      }
+    },
+    {
+      "name": "E",
+      "keyCode": 39,
+      "x": 3.5,
+      "y": 2.08,
+      "w": 1,
+      "label": "E",
+      "calc": {
+        "x": 4.03,
+        "y": 2.97,
+        "left_px": 222.46,
+        "top_px": 163.94,
+        "width_px": 55.2,
+        "height_px": 55.2
+      }
+    },
+    {
+      "name": "R",
+      "keyCode": 40,
+      "x": 4.5,
+      "y": 2.08,
+      "w": 1,
+      "label": "R",
+      "calc": {
+        "x": 5.07,
+        "y": 2.97,
+        "left_px": 279.86,
+        "top_px": 163.94,
+        "width_px": 55.2,
+        "height_px": 55.2
+      }
+    },
+    {
+      "name": "T",
+      "keyCode": 41,
+      "x": 5.5,
+      "y": 2.08,
+      "w": 1,
+      "label": "T",
+      "calc": {
+        "x": 6.11,
+        "y": 2.97,
+        "left_px": 337.27,
+        "top_px": 163.94,
+        "width_px": 55.2,
+        "height_px": 55.2
+      }
+    },
+    {
+      "name": "Y",
+      "keyCode": 42,
+      "x": 6.5,
+      "y": 2.08,
+      "w": 1,
+      "label": "Y",
+      "calc": {
+        "x": 7.15,
+        "y": 2.97,
+        "left_px": 394.68,
+        "top_px": 163.94,
+        "width_px": 55.2,
+        "height_px": 55.2
+      }
+    },
+    {
+      "name": "U",
+      "keyCode": 43,
+      "x": 7.5,
+      "y": 2.08,
+      "w": 1,
+      "label": "U",
+      "calc": {
+        "x": 8.19,
+        "y": 2.97,
+        "left_px": 452.09,
+        "top_px": 163.94,
+        "width_px": 55.2,
+        "height_px": 55.2
+      }
+    },
+    {
+      "name": "I",
+      "keyCode": 44,
+      "x": 8.5,
+      "y": 2.08,
+      "w": 1,
+      "label": "I",
+      "calc": {
+        "x": 9.23,
+        "y": 2.97,
+        "left_px": 509.5,
+        "top_px": 163.94,
+        "width_px": 55.2,
+        "height_px": 55.2
+      }
+    },
+    {
+      "name": "O",
+      "keyCode": 45,
+      "x": 9.5,
+      "y": 2.08,
+      "w": 1,
+      "label": "O",
+      "calc": {
+        "x": 10.27,
+        "y": 2.97,
+        "left_px": 566.9,
+        "top_px": 163.94,
+        "width_px": 55.2,
+        "height_px": 55.2
+      }
+    },
+    {
+      "name": "P",
+      "keyCode": 46,
+      "x": 10.5,
+      "y": 2.08,
+      "w": 1,
+      "label": "P",
+      "calc": {
+        "x": 11.31,
+        "y": 2.97,
+        "left_px": 624.31,
+        "top_px": 163.94,
+        "width_px": 55.2,
+        "height_px": 55.2
+      }
+    },
+    {
+      "name": "LEFT_BRACKET",
+      "keyCode": 47,
+      "x": 11.5,
+      "y": 2.08,
+      "w": 1,
+      "top": "{",
+      "sub": "[",
+      "calc": {
+        "x": 12.35,
+        "y": 2.97,
+        "left_px": 681.72,
+        "top_px": 163.94,
+        "width_px": 55.2,
+        "height_px": 55.2
+      }
+    },
+    {
+      "name": "RIGHT_BRACKET",
+      "keyCode": 48,
+      "x": 12.5,
+      "y": 2.08,
+      "w": 1,
+      "top": "}",
+      "sub": "]",
+      "calc": {
+        "x": 13.39,
+        "y": 2.97,
+        "left_px": 739.13,
+        "top_px": 163.94,
+        "width_px": 55.2,
+        "height_px": 55.2
+      }
+    },
+    {
+      "name": "BACKSLASH",
+      "keyCode": 49,
+      "x": 13.5,
+      "y": 2.08,
+      "w": 1.5,
+      "top": "|",
+      "sub": "\\",
+      "calc": {
+        "x": 14.43,
+        "y": 2.97,
+        "left_px": 796.54,
+        "top_px": 163.94,
+        "width_px": 82.8,
+        "height_px": 55.2
+      }
+    },
+    {
+      "name": "PAGE_DOWN",
+      "keyCode": 50,
+      "x": 15,
+      "y": 2.08,
+      "w": 1,
+      "label": "PGDN",
+      "calc": {
+        "x": 15.97,
+        "y": 2.97,
+        "left_px": 881.54,
+        "top_px": 163.94,
+        "width_px": 55.2,
+        "height_px": 55.2
+      }
+    },
+    {
+      "name": "CAPS_LOCK",
+      "keyCode": 51,
+      "x": 0,
+      "y": 3.12,
+      "w": 1.8,
+      "label": "CAPS",
+      "calc": {
+        "x": 0.41,
+        "y": 4.01,
+        "left_px": 22.63,
+        "top_px": 221.35,
+        "width_px": 99.36,
+        "height_px": 55.2
+      }
+    },
+    {
+      "name": "A",
+      "keyCode": 52,
+      "x": 1.8,
+      "y": 3.12,
+      "w": 1,
+      "label": "A",
+      "calc": {
+        "x": 2.25,
+        "y": 4.01,
+        "left_px": 124.2,
+        "top_px": 221.35,
+        "width_px": 55.2,
+        "height_px": 55.2
+      }
+    },
+    {
+      "name": "S",
+      "keyCode": 53,
+      "x": 2.8,
+      "y": 3.12,
+      "w": 1,
+      "label": "S",
+      "calc": {
+        "x": 3.29,
+        "y": 4.01,
+        "left_px": 181.61,
+        "top_px": 221.35,
+        "width_px": 55.2,
+        "height_px": 55.2
+      }
+    },
+    {
+      "name": "D",
+      "keyCode": 54,
+      "x": 3.8,
+      "y": 3.12,
+      "w": 1,
+      "label": "D",
+      "calc": {
+        "x": 4.33,
+        "y": 4.01,
+        "left_px": 239.02,
+        "top_px": 221.35,
+        "width_px": 55.2,
+        "height_px": 55.2
+      }
+    },
+    {
+      "name": "F",
+      "keyCode": 55,
+      "x": 4.8,
+      "y": 3.12,
+      "w": 1,
+      "label": "F",
+      "calc": {
+        "x": 5.37,
+        "y": 4.01,
+        "left_px": 296.42,
+        "top_px": 221.35,
+        "width_px": 55.2,
+        "height_px": 55.2
+      }
+    },
+    {
+      "name": "G",
+      "keyCode": 56,
+      "x": 5.8,
+      "y": 3.12,
+      "w": 1,
+      "label": "G",
+      "calc": {
+        "x": 6.41,
+        "y": 4.01,
+        "left_px": 353.83,
+        "top_px": 221.35,
+        "width_px": 55.2,
+        "height_px": 55.2
+      }
+    },
+    {
+      "name": "H",
+      "keyCode": 57,
+      "x": 6.8,
+      "y": 3.12,
+      "w": 1,
+      "label": "H",
+      "calc": {
+        "x": 7.45,
+        "y": 4.01,
+        "left_px": 411.24,
+        "top_px": 221.35,
+        "width_px": 55.2,
+        "height_px": 55.2
+      }
+    },
+    {
+      "name": "J",
+      "keyCode": 58,
+      "x": 7.8,
+      "y": 3.12,
+      "w": 1,
+      "label": "J",
+      "calc": {
+        "x": 8.49,
+        "y": 4.01,
+        "left_px": 468.65,
+        "top_px": 221.35,
+        "width_px": 55.2,
+        "height_px": 55.2
+      }
+    },
+    {
+      "name": "K",
+      "keyCode": 59,
+      "x": 8.8,
+      "y": 3.12,
+      "w": 1,
+      "label": "K",
+      "calc": {
+        "x": 9.53,
+        "y": 4.01,
+        "left_px": 526.06,
+        "top_px": 221.35,
+        "width_px": 55.2,
+        "height_px": 55.2
+      }
+    },
+    {
+      "name": "L",
+      "keyCode": 60,
+      "x": 9.8,
+      "y": 3.12,
+      "w": 1,
+      "label": "L",
+      "calc": {
+        "x": 10.57,
+        "y": 4.01,
+        "left_px": 583.46,
+        "top_px": 221.35,
+        "width_px": 55.2,
+        "height_px": 55.2
+      }
+    },
+    {
+      "name": "SEMICOLON",
+      "keyCode": 61,
+      "x": 10.8,
+      "y": 3.12,
+      "w": 1,
+      "top": ":",
+      "sub": ";",
+      "calc": {
+        "x": 11.61,
+        "y": 4.01,
+        "left_px": 640.87,
+        "top_px": 221.35,
+        "width_px": 55.2,
+        "height_px": 55.2
+      }
+    },
+    {
+      "name": "QUOTE",
+      "keyCode": 62,
+      "x": 11.8,
+      "y": 3.12,
+      "w": 1,
+      "top": "\"",
+      "sub": "'",
+      "calc": {
+        "x": 12.65,
+        "y": 4.01,
+        "left_px": 698.28,
+        "top_px": 221.35,
+        "width_px": 55.2,
+        "height_px": 55.2
+      }
+    },
+    {
+      "name": "ENTER",
+      "keyCode": 63,
+      "x": 12.8,
+      "y": 3.12,
+      "w": 2.24,
+      "label": "ENTER",
+      "calc": {
+        "x": 13.69,
+        "y": 4.01,
+        "left_px": 755.69,
+        "top_px": 221.35,
+        "width_px": 123.65,
+        "height_px": 55.2
+      }
+    },
+    {
+      "name": "HOME",
+      "keyCode": 64,
+      "x": 15.04,
+      "y": 3.12,
+      "w": 1,
+      "label": "HOME",
+      "calc": {
+        "x": 15.97,
+        "y": 4.01,
+        "left_px": 881.54,
+        "top_px": 221.35,
+        "width_px": 55.2,
+        "height_px": 55.2
+      }
+    },
+    {
+      "name": "LEFT_SHIFT",
+      "keyCode": 65,
+      "x": 0,
+      "y": 4.16,
+      "w": 2.3,
+      "label": "SHIFT",
+      "calc": {
+        "x": 0.41,
+        "y": 5.05,
+        "left_px": 22.63,
+        "top_px": 278.76,
+        "width_px": 126.96,
+        "height_px": 55.2
+      }
+    },
+    {
+      "name": "Z",
+      "keyCode": 66,
+      "x": 2.3,
+      "y": 4.16,
+      "w": 1,
+      "label": "Z",
+      "calc": {
+        "x": 2.75,
+        "y": 5.05,
+        "left_px": 151.8,
+        "top_px": 278.76,
+        "width_px": 55.2,
+        "height_px": 55.2
+      }
+    },
+    {
+      "name": "X",
+      "keyCode": 67,
+      "x": 3.3,
+      "y": 4.16,
+      "w": 1,
+      "label": "X",
+      "calc": {
+        "x": 3.79,
+        "y": 5.05,
+        "left_px": 209.21,
+        "top_px": 278.76,
+        "width_px": 55.2,
+        "height_px": 55.2
+      }
+    },
+    {
+      "name": "C",
+      "keyCode": 68,
+      "x": 4.3,
+      "y": 4.16,
+      "w": 1,
+      "label": "C",
+      "calc": {
+        "x": 4.83,
+        "y": 5.05,
+        "left_px": 266.62,
+        "top_px": 278.76,
+        "width_px": 55.2,
+        "height_px": 55.2
+      }
+    },
+    {
+      "name": "V",
+      "keyCode": 69,
+      "x": 5.3,
+      "y": 4.16,
+      "w": 1,
+      "label": "V",
+      "calc": {
+        "x": 5.87,
+        "y": 5.05,
+        "left_px": 324.02,
+        "top_px": 278.76,
+        "width_px": 55.2,
+        "height_px": 55.2
+      }
+    },
+    {
+      "name": "B",
+      "keyCode": 70,
+      "x": 6.3,
+      "y": 4.16,
+      "w": 1,
+      "label": "B",
+      "calc": {
+        "x": 6.91,
+        "y": 5.05,
+        "left_px": 381.43,
+        "top_px": 278.76,
+        "width_px": 55.2,
+        "height_px": 55.2
+      }
+    },
+    {
+      "name": "N",
+      "keyCode": 71,
+      "x": 7.3,
+      "y": 4.16,
+      "w": 1,
+      "label": "N",
+      "calc": {
+        "x": 7.95,
+        "y": 5.05,
+        "left_px": 438.84,
+        "top_px": 278.76,
+        "width_px": 55.2,
+        "height_px": 55.2
+      }
+    },
+    {
+      "name": "M",
+      "keyCode": 72,
+      "x": 8.3,
+      "y": 4.16,
+      "w": 1,
+      "label": "M",
+      "calc": {
+        "x": 8.99,
+        "y": 5.05,
+        "left_px": 496.25,
+        "top_px": 278.76,
+        "width_px": 55.2,
+        "height_px": 55.2
+      }
+    },
+    {
+      "name": "COMMA",
+      "keyCode": 73,
+      "x": 9.3,
+      "y": 4.16,
+      "w": 1,
+      "top": "<",
+      "sub": ",",
+      "calc": {
+        "x": 10.03,
+        "y": 5.05,
+        "left_px": 553.66,
+        "top_px": 278.76,
+        "width_px": 55.2,
+        "height_px": 55.2
+      }
+    },
+    {
+      "name": "DOT",
+      "keyCode": 74,
+      "x": 10.3,
+      "y": 4.16,
+      "w": 1,
+      "top": ">",
+      "sub": ".",
+      "calc": {
+        "x": 11.07,
+        "y": 5.05,
+        "left_px": 611.06,
+        "top_px": 278.76,
+        "width_px": 55.2,
+        "height_px": 55.2
+      }
+    },
+    {
+      "name": "SLASH",
+      "keyCode": 75,
+      "x": 11.3,
+      "y": 4.16,
+      "w": 1,
+      "top": "?",
+      "sub": "/",
+      "calc": {
+        "x": 12.11,
+        "y": 5.05,
+        "left_px": 668.47,
+        "top_px": 278.76,
+        "width_px": 55.2,
+        "height_px": 55.2
+      }
+    },
+    {
+      "name": "RIGHT_SHIFT",
+      "keyCode": 76,
+      "x": 12.34,
+      "y": 4.16,
+      "w": 1.7,
+      "label": "SHIFT",
+      "calc": {
+        "x": 13.19,
+        "y": 5.05,
+        "left_px": 728.09,
+        "top_px": 278.76,
+        "width_px": 93.84,
+        "height_px": 55.2
+      }
+    },
+    {
+      "name": "UP",
+      "keyCode": 77,
+      "x": 14.04,
+      "y": 4.16,
+      "w": 1,
+      "label": "↑",
+      "calc": {
+        "x": 14.93,
+        "y": 5.05,
+        "left_px": 824.14,
+        "top_px": 278.76,
+        "width_px": 55.2,
+        "height_px": 55.2
+      }
+    },
+    {
+      "name": "END",
+      "keyCode": 78,
+      "x": 15.04,
+      "y": 4.16,
+      "w": 1,
+      "label": "END",
+      "calc": {
+        "x": 15.97,
+        "y": 5.05,
+        "left_px": 881.54,
+        "top_px": 278.76,
+        "width_px": 55.2,
+        "height_px": 55.2
+      }
+    },
+    {
+      "name": "LEFT_CTRL",
+      "keyCode": 79,
+      "x": 0,
+      "y": 5.2,
+      "w": 1.25,
+      "label": "CTRL",
+      "calc": {
+        "x": 0.41,
+        "y": 6.09,
+        "left_px": 22.63,
+        "top_px": 336.17,
+        "width_px": 69.0,
+        "height_px": 55.2
+      }
+    },
+    {
+      "name": "LEFT_GUI",
+      "keyCode": 80,
+      "x": 1.25,
+      "y": 5.2,
+      "w": 1.25,
+      "label": "OPT",
+      "calc": {
+        "x": 1.7,
+        "y": 6.09,
+        "left_px": 93.84,
+        "top_px": 336.17,
+        "width_px": 69.0,
+        "height_px": 55.2
+      }
+    },
+    {
+      "name": "LEFT_ALT",
+      "keyCode": 81,
+      "x": 2.5,
+      "y": 5.2,
+      "w": 1.25,
+      "label": "CMD",
+      "calc": {
+        "x": 2.99,
+        "y": 6.09,
+        "left_px": 165.05,
+        "top_px": 336.17,
+        "width_px": 69.0,
+        "height_px": 55.2
+      }
+    },
+    {
+      "name": "SPACE",
+      "keyCode": 82,
+      "x": 3.75,
+      "y": 5.2,
+      "w": 5.71,
+      "label": "SPACE",
+      "calc": {
+        "x": 4.28,
+        "y": 6.09,
+        "left_px": 236.26,
+        "top_px": 336.17,
+        "width_px": 315.19,
+        "height_px": 55.2
+      }
+    },
+    {
+      "name": "RIGHT_ALT",
+      "keyCode": 83,
+      "x": 9.46,
+      "y": 5.2,
+      "w": 1.25,
+      "label": "CMD",
+      "calc": {
+        "x": 10.03,
+        "y": 6.09,
+        "left_px": 553.66,
+        "top_px": 336.17,
+        "width_px": 69.0,
+        "height_px": 55.2
+      }
+    },
+    {
+      "name": "FN1",
+      "keyCode": 84,
+      "x": 10.7,
+      "y": 5.2,
+      "w": 1.25,
+      "label": "FN1",
+      "calc": {
+        "x": 11.31,
+        "y": 6.09,
+        "left_px": 624.31,
+        "top_px": 336.17,
+        "width_px": 69.0,
+        "height_px": 55.2
+      }
+    },
+    {
+      "name": "RIGHT_CTRL",
+      "keyCode": 85,
+      "x": 11.95,
+      "y": 5.2,
+      "w": 1.25,
+      "label": "CTRL",
+      "calc": {
+        "x": 12.6,
+        "y": 6.09,
+        "left_px": 695.52,
+        "top_px": 336.17,
+        "width_px": 69.0,
+        "height_px": 55.2
+      }
+    },
+    {
+      "name": "LEFT",
+      "keyCode": 86,
+      "x": 13.2,
+      "y": 5.2,
+      "w": 1,
+      "label": "←",
+      "calc": {
+        "x": 13.89,
+        "y": 6.09,
+        "left_px": 766.73,
+        "top_px": 336.17,
+        "width_px": 55.2,
+        "height_px": 55.2
+      }
+    },
+    {
+      "name": "DOWN",
+      "keyCode": 87,
+      "x": 14.2,
+      "y": 5.2,
+      "w": 1,
+      "label": "↓",
+      "calc": {
+        "x": 14.93,
+        "y": 6.09,
+        "left_px": 824.14,
+        "top_px": 336.17,
+        "width_px": 55.2,
+        "height_px": 55.2
+      }
+    },
+    {
+      "name": "RIGHT",
+      "keyCode": 88,
+      "x": 15.2,
+      "y": 5.2,
+      "w": 1,
+      "label": "→",
+      "calc": {
+        "x": 15.97,
+        "y": 6.09,
+        "left_px": 881.54,
+        "top_px": 336.17,
+        "width_px": 55.2,
+        "height_px": 55.2
+      }
+    }
+  ],
+  "knob": {
+    "name": "KNOB",
+    "x": 15.2,
+    "y": 0,
+    "left_px": 894.79,
+    "top_px": 49.13,
+    "size_px": 55.2
+  }
+}

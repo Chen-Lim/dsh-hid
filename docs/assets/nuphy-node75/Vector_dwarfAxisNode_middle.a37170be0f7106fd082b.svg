@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg id="_图层_2" data-name="图层 2" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 6.71 66.67" preserveAspectRatio="none">
+  <g id="_图层_2-2" data-name=" 图层 2">
+    <g>
+      <rect y="65.72" width="6.71" height=".95"/>
+      <rect width="6.71" height=".96"/>
+      <path d="M0,4.82c2.24-.01,4.47-.01,6.71,0v.96c-2.23-.02-4.47-.02-6.71,0v-.96Z"/>
+      <path d="M0,60.88c2.24.02,4.48.02,6.71,0v.96c-2.24.01-4.47.01-6.71,0v-.96Z"/>
+    </g>
+  </g>
+</svg>
