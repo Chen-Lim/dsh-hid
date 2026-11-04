@@ -569,21 +569,32 @@ describe('DSH Client Companion Plugin (client.ts)', () => {
     renderedElements.length = 0;
     panelComponent!();
 
-    // 1. Check that SVG keyboard canvas is rendered with NuPhy Air75 V3 viewBox
-    const svgKeyboard = renderedElements.find(
-      (el) => el.type === 'svg' && el.props && el.props.viewBox === '0 0 959 384'
+    // 1. Check that NuPhy Air75 V3 HTML container #myKeyBoardBac is rendered
+    const keyboardBac = renderedElements.find(
+      (el) => el.type === 'div' && el.props && el.props.id === 'myKeyBoardBac'
     );
-    expect(svgKeyboard).toBeDefined();
+    expect(keyboardBac).toBeDefined();
 
-    // 2. Check that F1..F12 key elements exist in the SVG
-    const keyGNodes = renderedElements.filter(
-      (el) => el.type === 'g' && el.props && el.props.onClick
+    // 2. Check that frame image and roller are present
+    const frameImg = renderedElements.find(
+      (el) => el.type === 'img' && el.props && el.props.className === 'kb-frame'
     );
-    expect(keyGNodes.length).toBeGreaterThanOrEqual(12);
+    expect(frameImg).toBeDefined();
 
-    // 3. Find key F2 and click it -> triggers switchFocus(2) and opens session
-    const f2Node = keyGNodes.find(
-      (el) => el.props && el.props.key === 'KC_F2'
+    const rollerImg = renderedElements.find(
+      (el) => el.type === 'img' && el.props && el.props.className === 'roller-img'
+    );
+    expect(rollerImg).toBeDefined();
+
+    // 3. Check that .boxBacOut keycaps exist with wireframe structure
+    const keyNodes = renderedElements.filter(
+      (el) => el.type === 'div' && el.props && el.props.className === 'boxBacOut'
+    );
+    expect(keyNodes.length).toBe(83);
+
+    // 4. Find key F2 (#key-KC_F2) and click it -> triggers switchFocus(2) and opens session
+    const f2Node = keyNodes.find(
+      (el) => el.props && (el.props.id === 'key-KC_F2' || el.props.key === 'key-KC_F2')
     );
     expect(f2Node).toBeDefined();
     f2Node?.props?.onClick();
@@ -593,9 +604,9 @@ describe('DSH Client Companion Plugin (client.ts)', () => {
     expect(f2Sent.method).toBe('peripheral/switchFocus');
     expect(f2Sent.params.slotIndex).toBe(2);
 
-    // 4. In Slot 1 (NEEDS_INPUT), check that clicking the virtual Enter key approves
-    const enterNode = keyGNodes.find(
-      (el) => el.props && el.props.key === 'KC_ENTER'
+    // 5. In Slot 1 (NEEDS_INPUT), check that clicking the virtual Enter key approves
+    const enterNode = keyNodes.find(
+      (el) => el.props && (el.props.id === 'key-KC_ENTER' || el.props.key === 'key-KC_ENTER')
     );
     expect(enterNode).toBeDefined();
     enterNode?.props?.onClick();
