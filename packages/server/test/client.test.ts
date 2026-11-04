@@ -851,5 +851,169 @@ describe('DSH Client Companion Plugin (client.ts)', () => {
 
     if (typeof cleanup === 'function') cleanup();
   });
+
+  it('supports dark mode for the peripheral panel and Air75 V3 keyboard blueprint', () => {
+    const clientJsPath = join(__dirname, '../dist/client.js');
+    const content = readFileSync(clientJsPath, 'utf8');
+
+    let capturedWs: any = null;
+    class MockWebSocket {
+      public static OPEN = 1;
+      public onopen: any;
+      public onmessage: any;
+      public onclose: any;
+      public onerror: any;
+      public readyState = 1;
+      public send = vi.fn();
+      public close = vi.fn();
+      constructor(public url: string) {
+        capturedWs = this;
+      }
+    }
+    (globalThis as any).WebSocket = MockWebSocket;
+
+    const fn = new Function('window', 'WebSocket', content);
+    fn((globalThis as any).window, MockWebSocket);
+
+    const renderedElements: Array<{ type: any; props: any; children: any[] }> = [];
+    const mockReact = {
+      createElement: vi.fn((type: any, props: any, ...children: any[]) => {
+        const el = { type, props, children };
+        renderedElements.push(el);
+        return el;
+      }),
+      useState: vi.fn((init: any) => [init, () => {}]),
+      useEffect: vi.fn((cb: any) => cb()),
+    };
+
+    const plugin = mockModuleLoader.load.mock.calls[0][0].factory((name: string) => {
+      if (name === 'react') return mockReact;
+      return undefined;
+    });
+
+    let currentColorScheme: 'light' | 'dark' = 'light';
+    let themeChangeHandler: ((payload: any) => void) | null = null;
+    let panelComponent: (() => any) | null = null;
+
+    const cleanup = plugin.apply({
+      slots: {
+        inject: (_key: string, registerFn: () => unknown) => {
+          registerFn();
+          return () => {};
+        },
+        register: (meta: any, component: any) => {
+          if (meta.name === 'main' && meta.key === 'peripheral') {
+            panelComponent = component;
+          }
+          return () => {};
+        },
+      },
+      uiWorkspace: { openSession: vi.fn() },
+      theme: {
+        getTheme: () => ({ active: { colorScheme: currentColorScheme } }),
+      },
+      on: vi.fn((event: string, cb: any) => {
+        if (event === 'theme/change') {
+          themeChangeHandler = cb;
+        }
+        return () => {};
+      }),
+    });
+
+    expect(panelComponent).not.toBeNull();
+    capturedWs.onopen();
+    capturedWs.onmessage({
+      data: JSON.stringify({
+        method: 'peripheral/snapshot',
+        params: {
+          focusedSlot: 1,
+          slots: [
+            {
+              slotIndex: 1,
+              sessionId: 'sess-approval-1',
+              status: 'NEEDS_INPUT',
+              activeTool: 'bash',
+              question: { prompt: 'Allow bash command?' },
+            },
+            {
+              slotIndex: 2,
+              sessionId: 'sess-running-2',
+              status: 'RUNNING',
+              activeTool: 'read_file',
+            },
+          ],
+        },
+      }),
+    });
+
+    // 1. Default light mode render
+    renderedElements.length = 0;
+    panelComponent!();
+    const lightPage = renderedElements.find(
+      (el) => el.type === 'div' && el.props?.className === 'peripheral-page'
+    );
+    expect(lightPage?.props?.['data-theme']).toBe('light');
+
+    // 2. Switch to dark mode via DSH theme/change event
+    currentColorScheme = 'dark';
+    expect(themeChangeHandler).not.toBeNull();
+    themeChangeHandler!({ active: { colorScheme: 'dark' } });
+
+    renderedElements.length = 0;
+    panelComponent!();
+
+    const darkPage = renderedElements.find(
+      (el) => el.type === 'div' && el.props?.className === 'peripheral-page'
+    );
+    expect(darkPage?.props?.['data-theme']).toBe('dark');
+
+    const keyNodes = renderedElements.filter(
+      (el) => el.type === 'div' && el.props?.className === 'boxBacOut'
+    );
+    const capParts = (id: string) => {
+      const node = keyNodes.find((el) => el.props?.id === id);
+      expect(node, `${id} must render`).toBeDefined();
+      const inner = node!.children[0];
+      return {
+        outer: node!,
+        bg: inner.children[0],
+        wireframe: inner.children[1],
+        box: inner.children[2],
+      };
+    };
+
+    // Unassigned key uses dark keycap surface (#25272e) and light wireframe ink (#d4d8e2)
+    const qCap = capParts('key-KC_Q');
+    expect(qCap.bg.props.style.backgroundColor).toBe('#25272e');
+    expect(
+      qCap.wireframe.children.map((el: any) => el.props.style.backgroundColor)
+    ).toEqual(['#d4d8e2', '#d4d8e2', '#d4d8e2']);
+
+    // RUNNING slot (F2) uses dark blue wash (#17293b) and sky LED (#38bdf8)
+    const f2Cap = capParts('key-KC_F2');
+    expect(f2Cap.bg.props.style.backgroundColor).toBe('#17293b');
+    expect(f2Cap.box.children[1]?.props?.style?.color).toBe('#38bdf8');
+
+    // Focused NEEDS_INPUT slot (F1) uses dark amber wash (#382b16)
+    const f1Cap = capParts('key-KC_F1');
+    expect(f1Cap.bg.props.style.backgroundColor).toBe('#382b16');
+    expect(f1Cap.box.children[1]?.props?.style?.color).toBe('#f59e0b');
+
+    // Approval shortcut keys use dark-mode washes
+    const enterCap = capParts('key-KC_ENTER');
+    expect(enterCap.bg.props.style.backgroundColor).toBe('#163524');
+    const escCap = capParts('key-KC_ESC');
+    expect(escCap.bg.props.style.backgroundColor).toBe('#3b1a20');
+
+    // Verify dark mode CSS rules exist for stage, frame, and roller
+    const styleNode = renderedElements.find((el) => el.type === 'style');
+    const css = String(styleNode?.children?.[0] ?? '');
+    expect(css).toContain('.peripheral-page[data-theme="dark"] #stage.air75-stage');
+    expect(css).toContain('body[data-ds-dark-theme] #stage.air75-stage');
+    expect(css).toContain('.peripheral-page[data-theme="dark"] .kb-frame');
+    expect(css).toContain('.peripheral-page[data-theme="dark"] .roller-img');
+
+    if (typeof cleanup === 'function') cleanup();
+  });
 });
 

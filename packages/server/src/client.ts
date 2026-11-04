@@ -53,6 +53,7 @@ interface UiState {
   slots: UiSlot[];
   lastError: string | null;
   transportState?: UiTransportState | null;
+  darkMode?: boolean;
 }
 
 interface KeyboardKeyDef {
@@ -202,8 +203,10 @@ interface KeycapTheme {
 
 /** Reference ink used by every keycap wireframe. */
 const AIR75_KEYCAP_INK = '#1d1d1f';
+const AIR75_DARK_KEYCAP_INK = '#d4d8e2';
 /** Reference legend color used by every keycap label. */
 const AIR75_KEYCAP_LABEL = 'rgba(29, 29, 31, 0.92)';
+const AIR75_DARK_KEYCAP_LABEL = 'rgba(241, 245, 249, 0.92)';
 
 /**
  * Reference keycap treatment: white cap, near-black wireframe and legend.
@@ -213,6 +216,11 @@ const AIR75_KEYCAP_LABEL = 'rgba(29, 29, 31, 0.92)';
 const AIR75_KEYCAP_THEME: KeycapTheme = {
   background: '#fbfbfd',
   glow: '0 1px 2px rgba(0,0,0,0.06)',
+};
+
+const AIR75_DARK_KEYCAP_THEME: KeycapTheme = {
+  background: '#25272e',
+  glow: '0 1px 2px rgba(0,0,0,0.45)',
 };
 
 const AIR75_STATUS_THEMES: Record<string, KeycapTheme> = {
@@ -244,6 +252,35 @@ const AIR75_STATUS_THEMES: Record<string, KeycapTheme> = {
   },
 };
 
+const AIR75_DARK_STATUS_THEMES: Record<string, KeycapTheme> = {
+  INACTIVE: AIR75_DARK_KEYCAP_THEME,
+  IDLE: {
+    background: '#2b2f38',
+    glow: '0 1px 2px rgba(0,0,0,0.45)',
+    led: '#94a3b8',
+  },
+  RUNNING: {
+    background: '#17293b',
+    glow: '0 0 14px rgba(56, 189, 248, 0.28)',
+    led: '#38bdf8',
+  },
+  NEEDS_INPUT: {
+    background: '#382b16',
+    glow: '0 0 16px rgba(245, 158, 11, 0.36)',
+    led: '#f59e0b',
+  },
+  COMPLETED: {
+    background: '#163226',
+    glow: '0 0 12px rgba(16, 185, 129, 0.28)',
+    led: '#10b981',
+  },
+  ERROR: {
+    background: '#391b23',
+    glow: '0 0 14px rgba(244, 63, 94, 0.34)',
+    led: '#f43f5e',
+  },
+};
+
 const AIR75_ACTION_THEMES = {
   ACCEPT: {
     background: '#f0fdf4',
@@ -259,6 +296,24 @@ const AIR75_ACTION_THEMES = {
     background: '#f5f3ff',
     glow: '0 0 14px rgba(124, 58, 237, 0.32)',
     led: '#7c3aed',
+  },
+} as const satisfies Record<string, KeycapTheme>;
+
+const AIR75_DARK_ACTION_THEMES = {
+  ACCEPT: {
+    background: '#163524',
+    glow: '0 0 14px rgba(34, 197, 94, 0.38)',
+    led: '#22c55e',
+  },
+  REJECT: {
+    background: '#3b1a20',
+    glow: '0 0 14px rgba(239, 68, 68, 0.38)',
+    led: '#ef4444',
+  },
+  ALWAYS_ALLOW: {
+    background: '#2a1f42',
+    glow: '0 0 14px rgba(167, 139, 250, 0.35)',
+    led: '#a78bfa',
   },
 } as const satisfies Record<string, KeycapTheme>;
 
@@ -506,6 +561,38 @@ const AIR75_CSS = `
     object-fit: contain;
     filter: drop-shadow(0 1px 2px rgba(0,0,0,0.15));
   }
+  .peripheral-page[data-theme="dark"] #stage.air75-stage,
+  body[data-ds-dark-theme] #stage.air75-stage {
+    background: #181a20;
+    box-shadow: 0 20px 40px rgba(0,0,0,0.42), 0 0 0 1px rgba(255,255,255,0.08);
+  }
+  .peripheral-page[data-theme="dark"] .kb-frame,
+  body[data-ds-dark-theme] .kb-frame {
+    filter: invert(0.88) hue-rotate(180deg) drop-shadow(0 0 0.25px rgba(255,255,255,0.45));
+    opacity: 0.92;
+  }
+  .peripheral-page[data-theme="dark"] .wireframeBac,
+  body[data-ds-dark-theme] .wireframeBac {
+    filter: drop-shadow(0 0 0.25px rgba(0,0,0,0.65));
+  }
+  .peripheral-page[data-theme="dark"] .key-dual .key-top,
+  body[data-ds-dark-theme] .key-dual .key-top {
+    color: rgba(226, 232, 240, 0.55);
+  }
+  .peripheral-page[data-theme="dark"] .key-dual .key-sub,
+  body[data-ds-dark-theme] .key-dual .key-sub,
+  .peripheral-page[data-theme="dark"] .boxBac p,
+  body[data-ds-dark-theme] .boxBac p {
+    color: rgba(241, 245, 249, 0.92);
+  }
+  .peripheral-page[data-theme="dark"] .key-led,
+  body[data-ds-dark-theme] .key-led {
+    box-shadow: 0 0 0 1px rgba(15, 17, 21, 0.9), 0 0 8px currentColor;
+  }
+  .peripheral-page[data-theme="dark"] .roller-img,
+  body[data-ds-dark-theme] .roller-img {
+    filter: invert(0.86) hue-rotate(180deg) drop-shadow(0 1px 3px rgba(0,0,0,0.55));
+  }
 `;
 
 const AIR75_KEYS: KeyboardKeyDef[] = [
@@ -603,8 +690,14 @@ if (win?.__ModuleLoader__) {
       const React: any = typeof require === 'function' ? require('react') : undefined;
       const h: any = React ? React.createElement : undefined;
 
-      function createStore() {
-        let state: UiState = { connected: false, focusedSlot: 1, slots: [], lastError: null };
+      function createStore(initialDarkMode = false) {
+        let state: UiState = {
+          connected: false,
+          focusedSlot: 1,
+          slots: [],
+          lastError: null,
+          darkMode: initialDarkMode,
+        };
         const listeners = new Set<() => void>();
         const emit = () => {
           for (const listener of listeners) {
@@ -665,13 +758,85 @@ if (win?.__ModuleLoader__) {
       }
 
       return {
-        inject: ['slots', 'uiWorkspace', 'locale'],
+        inject: ['slots', 'uiWorkspace', 'locale', 'theme'],
         apply(ctx: any) {
-          const store = createStore();
+          const themeService = typeof ctx.get === 'function' ? ctx.get('theme') : ctx?.theme;
+          function detectDarkMode(themeEventPayload?: any): boolean {
+            try {
+              const fromPayload = themeEventPayload?.active?.colorScheme;
+              if (fromPayload === 'dark') return true;
+              if (fromPayload === 'light') return false;
+              const fromService = themeService?.getTheme?.()?.active?.colorScheme;
+              if (fromService === 'dark') return true;
+              if (fromService === 'light') return false;
+            } catch {
+              // ignore theme service access errors
+            }
+            if (typeof document !== 'undefined') {
+              try {
+                if (document.body?.hasAttribute?.('data-ds-dark-theme')) return true;
+                const docEl = document.documentElement;
+                if (docEl?.getAttribute?.('data-ds-theme-source') === 'dark') return true;
+                if (docEl?.getAttribute?.('data-ds-theme-source') === 'light') return false;
+                if (docEl?.style?.colorScheme === 'dark') return true;
+                if (docEl?.style?.colorScheme === 'light') return false;
+              } catch {
+                // ignore DOM read errors
+              }
+            }
+            return false;
+          }
+
+          const store = createStore(detectDarkMode());
           const disposers: Array<() => void> = [];
           const lifecycle = { disposed: false, navigating: false };
           let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
           let ws: WebSocket | null = null;
+
+          const syncDarkMode = (payload?: any) => {
+            const nextDark = detectDarkMode(payload);
+            if (store.get().darkMode !== nextDark) {
+              store.patch({ darkMode: nextDark });
+            }
+          };
+
+          if (typeof ctx.on === 'function') {
+            try {
+              const unlistenTheme = ctx.on('theme/change', (payload: any) => {
+                syncDarkMode(payload);
+              });
+              if (typeof unlistenTheme === 'function') {
+                disposers.push(unlistenTheme);
+              }
+            } catch {}
+          }
+
+          if (typeof document !== 'undefined') {
+            const MO =
+              (win as any)?.MutationObserver ?? (globalThis as any)?.MutationObserver;
+            if (typeof MO === 'function') {
+              try {
+                const observer = new MO(() => syncDarkMode());
+                if (document.body) {
+                  observer.observe(document.body, {
+                    attributes: true,
+                    attributeFilter: ['data-ds-dark-theme', 'class'],
+                  });
+                }
+                if (document.documentElement) {
+                  observer.observe(document.documentElement, {
+                    attributes: true,
+                    attributeFilter: ['data-ds-theme-source', 'style', 'class'],
+                  });
+                }
+                disposers.push(() => {
+                  try {
+                    observer.disconnect();
+                  } catch {}
+                });
+              } catch {}
+            }
+          }
           let t: (key: string) => string = (key) => {
             const isZh =
               typeof navigator !== 'undefined' &&
@@ -1075,12 +1240,12 @@ if (win?.__ModuleLoader__) {
                   padding: '9px 14px',
                   borderTop: slot.slotIndex === 1 ? 'none' : '1px solid var(--dsw-alias-border-l1)',
                   borderLeft: focused
-                    ? '3px solid var(--dsw-alias-brand-primary, #38bdf8)'
+                    ? '3px solid var(--dsw-alias-state-business-primary, #38bdf8)'
                     : '3px solid transparent',
                   background: focused
-                    ? 'var(--dsw-alias-bg-layer-2, rgba(255, 255, 255, 0.07))'
+                    ? 'var(--dsw-alias-interactive-bg-active, var(--dsw-alias-bg-layer-2, rgba(56, 189, 248, 0.08)))'
                     : isHovered
-                    ? 'rgba(255, 255, 255, 0.03)'
+                    ? 'var(--dsw-alias-interactive-bg-hover, rgba(128, 128, 128, 0.06))'
                     : 'transparent',
                   cursor: interactive ? 'pointer' : 'default',
                   transition: 'background 0.15s ease, border-left 0.15s ease',
@@ -1098,15 +1263,15 @@ if (win?.__ModuleLoader__) {
                     height: '24px',
                     borderRadius: '5px',
                     border: focused
-                      ? '1px solid var(--dsw-alias-brand-primary, #38bdf8)'
+                      ? '1px solid var(--dsw-alias-state-business-primary, #38bdf8)'
                       : '1px solid var(--dsw-alias-border-l1)',
                     background: focused
-                      ? 'rgba(56, 189, 248, 0.15)'
-                      : 'var(--dsw-alias-bg-layer-1, rgba(0, 0, 0, 0.2))',
+                      ? 'rgba(56, 189, 248, 0.14)'
+                      : 'var(--dsw-alias-interactive-bg-hover, var(--dsw-alias-bg-layer-1))',
                     fontSize: '12px',
                     fontWeight: 700,
                     color: focused
-                      ? 'var(--dsw-alias-brand-primary, #38bdf8)'
+                      ? 'var(--dsw-alias-state-business-primary, #38bdf8)'
                       : 'var(--dsw-alias-label-primary)',
                   },
                 },
@@ -1236,7 +1401,7 @@ if (win?.__ModuleLoader__) {
                         style: {
                           fontSize: '11px',
                           color: focused
-                            ? 'var(--dsw-alias-brand-primary, #38bdf8)'
+                            ? 'var(--dsw-alias-state-business-primary, #38bdf8)'
                             : 'var(--dsw-alias-label-secondary)',
                         },
                       },
@@ -1254,7 +1419,8 @@ if (win?.__ModuleLoader__) {
           function renderKeyboardVisualization(
             current: UiState,
             hoveredSlot: number | null,
-            setHoveredSlot: (s: number | null) => void
+            setHoveredSlot: (s: number | null) => void,
+            isDark = false
           ) {
             const currentFocusedSlot = current.focusedSlot;
             const focusedSlotData = current.slots.find(
@@ -1266,6 +1432,12 @@ if (win?.__ModuleLoader__) {
             const inspectSlotData = current.slots.find(
               (s) => s.slotIndex === activeInspectSlot
             );
+
+            const statusThemes = isDark ? AIR75_DARK_STATUS_THEMES : AIR75_STATUS_THEMES;
+            const defaultKeyTheme = isDark ? AIR75_DARK_KEYCAP_THEME : AIR75_KEYCAP_THEME;
+            const actionThemes = isDark ? AIR75_DARK_ACTION_THEMES : AIR75_ACTION_THEMES;
+            const keycapInk = isDark ? AIR75_DARK_KEYCAP_INK : AIR75_KEYCAP_INK;
+            const keycapLabel = isDark ? AIR75_DARK_KEYCAP_LABEL : AIR75_KEYCAP_LABEL;
 
             const [viewportNode, setViewportNode] = React.useState(null as HTMLElement | null);
             React.useEffect(() => {
@@ -1315,8 +1487,10 @@ if (win?.__ModuleLoader__) {
                   padding: '20px',
                   borderRadius: '12px',
                   border: '1px solid var(--dsw-alias-border-l1)',
-                  background: 'var(--dsw-alias-bg-layer-1, #13161c)',
-                  boxShadow: '0 8px 24px rgba(0, 0, 0, 0.15)',
+                  background: 'var(--dsw-alias-bg-layer-1)',
+                  boxShadow: isDark
+                    ? '0 8px 24px rgba(0, 0, 0, 0.32)'
+                    : '0 4px 16px rgba(15, 23, 42, 0.05)',
                 },
               },
               // Inlined CSS for NuPhy Air75 V3 wireframe rendering
@@ -1385,7 +1559,7 @@ if (win?.__ModuleLoader__) {
                           gap: '5px',
                           padding: '2px 7px',
                           borderRadius: '4px',
-                          background: 'rgba(255, 255, 255, 0.04)',
+                          background: 'var(--dsw-alias-interactive-bg-hover, rgba(128, 128, 128, 0.06))',
                           border: '1px solid var(--dsw-alias-border-l1)',
                         },
                       },
@@ -1465,14 +1639,14 @@ if (win?.__ModuleLoader__) {
                       // slot status expressed as a pale wash, a soft glow and a small
                       // status LED instead of a solid color block.
                       let keyTheme: KeycapTheme = isFKey
-                        ? AIR75_STATUS_THEMES[slotStatus] ?? AIR75_KEYCAP_THEME
-                        : AIR75_KEYCAP_THEME;
+                        ? statusThemes[slotStatus] ?? defaultKeyTheme
+                        : defaultKeyTheme;
                       if (isAcceptKey) {
-                        keyTheme = AIR75_ACTION_THEMES.ACCEPT;
+                        keyTheme = actionThemes.ACCEPT;
                       } else if (isRejectKey) {
-                        keyTheme = AIR75_ACTION_THEMES.REJECT;
+                        keyTheme = actionThemes.REJECT;
                       } else if (isAlwaysAllowKey) {
-                        keyTheme = AIR75_ACTION_THEMES.ALWAYS_ALLOW;
+                        keyTheme = actionThemes.ALWAYS_ALLOW;
                       }
                       const ledColor = keyTheme.led ?? null;
 
@@ -1489,13 +1663,15 @@ if (win?.__ModuleLoader__) {
                         // A hairline ring in the slot accent, never a heavy brand
                         // border: the reference keycap already has its own outline.
                         outerStyle.boxShadow = `0 0 0 1.5px ${
-                          ledColor ?? 'rgba(29, 29, 31, 0.5)'
+                          ledColor ?? (isDark ? 'rgba(226, 232, 240, 0.55)' : 'rgba(29, 29, 31, 0.5)')
                         }`;
                         outerStyle.borderRadius = '7px';
                         outerStyle.transform = 'translateY(-1px)';
                         outerStyle.zIndex = 20;
                       } else if (isHovered) {
-                        outerStyle.boxShadow = '0 0 0 1px rgba(29, 29, 31, 0.22)';
+                        outerStyle.boxShadow = isDark
+                          ? '0 0 0 1px rgba(226, 232, 240, 0.28)'
+                          : '0 0 0 1px rgba(29, 29, 31, 0.22)';
                         outerStyle.borderRadius = '7px';
                         outerStyle.transform = 'translateY(-1px)';
                         outerStyle.zIndex = 15;
@@ -1509,7 +1685,7 @@ if (win?.__ModuleLoader__) {
                           h('span', { className: 'key-top' }, key.topLabel),
                           h(
                             'span',
-                            { className: 'key-sub', style: { color: AIR75_KEYCAP_LABEL } },
+                            { className: 'key-sub', style: { color: keycapLabel } },
                             key.subLabel
                           )
                         );
@@ -1519,7 +1695,7 @@ if (win?.__ModuleLoader__) {
                           {
                             style: {
                               fontSize: `${key.labelSize ?? 11}px`,
-                              color: AIR75_KEYCAP_LABEL,
+                              color: keycapLabel,
                               margin: 0,
                             },
                           },
@@ -1553,15 +1729,15 @@ if (win?.__ModuleLoader__) {
                             { className: 'wireframeBac' },
                             h('div', {
                               className: 'cap-left',
-                              style: { backgroundColor: AIR75_KEYCAP_INK },
+                              style: { backgroundColor: keycapInk },
                             }),
                             h('div', {
                               className: 'cap-middle',
-                              style: { backgroundColor: AIR75_KEYCAP_INK },
+                              style: { backgroundColor: keycapInk },
                             }),
                             h('div', {
                               className: 'cap-right',
-                              style: { backgroundColor: AIR75_KEYCAP_INK },
+                              style: { backgroundColor: keycapInk },
                             })
                           ),
                           h(
@@ -1610,7 +1786,7 @@ if (win?.__ModuleLoader__) {
                     padding: '10px 14px',
                     borderRadius: '8px',
                     border: '1px solid var(--dsw-alias-border-l1)',
-                    background: 'var(--dsw-alias-bg-layer-2, rgba(255, 255, 255, 0.05))',
+                    background: 'var(--dsw-alias-interactive-bg-hover, var(--dsw-alias-bg-layer-2))',
                     display: 'flex',
                     flexWrap: 'wrap',
                     alignItems: 'center',
@@ -1633,7 +1809,7 @@ if (win?.__ModuleLoader__) {
                     {
                       style: {
                         fontWeight: 700,
-                        color: 'var(--dsw-alias-brand-primary, #38bdf8)',
+                        color: 'var(--dsw-alias-state-business-primary, #38bdf8)',
                       },
                     },
                     `F${activeInspectSlot}`
@@ -1656,7 +1832,7 @@ if (win?.__ModuleLoader__) {
                           style: {
                             fontFamily:
                               'var(--dsw-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace)',
-                            color: 'var(--dsw-alias-brand-primary, #38bdf8)',
+                            color: 'var(--dsw-alias-state-business-primary, #38bdf8)',
                             fontSize: '11px',
                           },
                         },
@@ -1682,6 +1858,7 @@ if (win?.__ModuleLoader__) {
           function PeripheralPanel() {
             const current = useStore(store);
             const [hoveredSlot, setHoveredSlot] = React.useState(null as number | null);
+            const isDark = Boolean(current.darkMode ?? detectDarkMode());
 
             const rows: UiSlot[] = current.slots.length
               ? current.slots
@@ -1700,6 +1877,7 @@ if (win?.__ModuleLoader__) {
               'div',
               {
                 className: 'peripheral-page',
+                'data-theme': isDark ? 'dark' : 'light',
               },
               h(
                 'div',
@@ -1840,7 +2018,7 @@ if (win?.__ModuleLoader__) {
                   )
                 ),
                 // Lower Half: Interactive NuPhy Air75 V3 Physical Keyboard Visualizer
-                renderKeyboardVisualization(current, hoveredSlot, setHoveredSlot),
+                renderKeyboardVisualization(current, hoveredSlot, setHoveredSlot, isDark),
                 current.lastError
                   ? h(
                       'p',
