@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeAll, beforeEach, afterEach, vi } from 'vitest';
 import { spawn, execFileSync, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { existsSync, mkdirSync } from 'node:fs';
 import { createInterface } from 'node:readline';
@@ -292,8 +292,9 @@ describe('Swift 6 Native S4 Daemon (DshDaemon.swift) Cross-Verification', () => 
       });
       await harness.waitForMessage((m) => m.id === 15 && m.ok === true);
 
-      // Wait for all 4 RPC responses to be acknowledged
+      // Wait for all 4 RPC responses to be acknowledged and transport notification to arrive
       await harness.waitForMessage((m) => m.event === 'dshRpcResponse' && m.id === 4);
+      await vi.waitFor(() => expect(receivedRpcCalls.length).toBe(5));
 
       expect(receivedRpcCalls).toEqual([
         {

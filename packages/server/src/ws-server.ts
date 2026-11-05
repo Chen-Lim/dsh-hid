@@ -438,6 +438,7 @@ export class PeripheralWsServer {
         }
       }
     }, this.heartbeatIntervalMs);
+    this.pingInterval.unref();
   }
 
   /**
@@ -562,11 +563,28 @@ export class PeripheralWsServer {
     this.uiClients.clear();
 
     return new Promise((resolve) => {
-      this.wss?.close(() => {
-        this.started = false;
-        this.wss = null;
-        resolve();
-      });
+      let settled = false;
+      const done = () => {
+        if (!settled) {
+          settled = true;
+          this.started = false;
+          this.wss = null;
+          resolve();
+        }
+      };
+
+      const safetyTimer = setTimeout(done, 1000);
+      safetyTimer.unref();
+
+      try {
+        this.wss?.close(() => {
+          clearTimeout(safetyTimer);
+          done();
+        });
+      } catch {
+        clearTimeout(safetyTimer);
+        done();
+      }
     });
   }
 }

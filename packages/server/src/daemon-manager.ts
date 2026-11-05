@@ -33,6 +33,16 @@ export class DaemonManager {
   private consecutiveRestarts = 0;
   private lastStartTime = 0;
 
+  private readonly onProcessExit = () => {
+    if (this.child && !this.child.killed) {
+      try {
+        this.child.kill('SIGTERM');
+      } catch {
+        // ignore
+      }
+    }
+  };
+
   constructor(options: DaemonManagerOptions) {
     this.wsUrl = options.wsUrl;
     this.customPath = options.daemonPath;
@@ -42,19 +52,10 @@ export class DaemonManager {
     this.maxConsecutiveRestarts = options.maxConsecutiveRestarts ?? 5;
 
     // Register process-level cleanup handlers for when Electron/Node exits
-    const onExit = () => {
-      if (this.child && !this.child.killed) {
-        try {
-          this.child.kill('SIGTERM');
-        } catch {
-          // ignore
-        }
-      }
-    };
-    process.once('exit', onExit);
-    process.once('SIGINT', onExit);
-    process.once('SIGTERM', onExit);
-    process.once('beforeExit', onExit);
+    process.once('exit', this.onProcessExit);
+    process.once('SIGINT', this.onProcessExit);
+    process.once('SIGTERM', this.onProcessExit);
+    process.once('beforeExit', this.onProcessExit);
   }
 
   /**
@@ -247,6 +248,12 @@ export class DaemonManager {
   public async stop(): Promise<void> {
     this.isStopping = true;
 
+    // Unbind global process listeners to avoid memory leaks
+    process.off('exit', this.onProcessExit);
+    process.off('SIGINT', this.onProcessExit);
+    process.off('SIGTERM', this.onProcessExit);
+    process.off('beforeExit', this.onProcessExit);
+
     if (this.restartTimer) {
       clearTimeout(this.restartTimer);
       this.restartTimer = null;
@@ -275,7 +282,7 @@ export class DaemonManager {
 
       child.once('exit', finish);
 
-      // Send SIGTERM to give Swift daemon time to restore lighting profile
+      // Send SIGTERM to give daemon time to restore lighting profile
       try {
         child.kill('SIGTERM');
       } catch {
@@ -283,7 +290,8 @@ export class DaemonManager {
         return;
       }
 
-      // Hard kill fallback after 3 seconds if not gracefully exited
+      // Fast hard kill fallback after 1.2 seconds if not gracefully exited,
+      // strictly respecting the Host shutdown deadline (PROCESS_SHUTDOWN_TIMEOUT_MS = 5000ms).
       const forceKillTimer = setTimeout(() => {
         try {
           if (!child.killed) {
@@ -293,7 +301,8 @@ export class DaemonManager {
           // ignore
         }
         finish();
-      }, 3000);
+      }, 1200);
+      forceKillTimer.unref();
 
       child.once('exit', () => {
         clearTimeout(forceKillTimer);

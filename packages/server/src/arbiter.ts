@@ -293,6 +293,21 @@ export class ApprovalArbiter {
   }
 
   /**
+   * Disposes and cancels all pending approval requests upon server shutdown.
+   */
+  public dispose(): void {
+    for (const entry of this.pendingBySession.values()) {
+      try {
+        entry.childController.abort('disposed');
+        entry.resolveHardware('cancelled');
+      } catch {
+        // ignore
+      }
+    }
+    this.pendingBySession.clear();
+  }
+
+  /**
    * Returns true if the given session currently has an active arbitrated approval request.
    */
   public hasPendingApproval(sessionId: string): boolean {

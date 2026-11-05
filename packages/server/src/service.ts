@@ -290,7 +290,12 @@ export class PeripheralServerService extends Service {
     this.registerDshEvents();
     this.arbiter.attach();
 
-    // Auto-clean on context dispose
+    // Auto-clean on Cordis fiber disposal (official Cordis lifecycle)
+    this.ctx.effect(() => () => {
+      return this.stop();
+    }, 'peripheral-server:lifecycle');
+
+    // Backward-compatible fallback for synthetic test emits
     this.ctx.on('dispose', async () => {
       await this.stop();
     });
@@ -663,9 +668,20 @@ export class PeripheralServerService extends Service {
    * Stops the peripheral server and terminates active client connections and daemon process.
    */
   public async stop(): Promise<void> {
-    this.localeBinding.dispose();
-    await this.daemonManager.stop();
-    await this.wsServer.close();
+    try {
+      this.localeBinding.dispose();
+    } catch {
+      // ignore
+    }
+    try {
+      this.arbiter.dispose();
+    } catch {
+      // ignore
+    }
+    await Promise.allSettled([
+      this.daemonManager.stop(),
+      this.wsServer.close(),
+    ]);
   }
 }
 
