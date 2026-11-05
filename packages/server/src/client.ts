@@ -859,7 +859,14 @@ if (win?.__ModuleLoader__) {
                 t = locale.bind('peripheral');
               }
             } catch {
-              // Locale registration is cosmetic; keep the fallbacks on failure.
+              try {
+                disposers.push(locale.register('peripheral', { en: EN_DICT, zh: ZH_DICT }));
+                if (typeof locale.bind === 'function') {
+                  t = locale.bind('peripheral');
+                }
+              } catch {
+                // Locale registration is cosmetic; keep the fallbacks on failure.
+              }
             }
 
             // Sync with host locale switch in real time
@@ -946,6 +953,14 @@ if (win?.__ModuleLoader__) {
             }
           }
 
+          function getRemoteService(): any {
+            try {
+              return typeof ctx.get === 'function' ? ctx.get('remote') : (ctx as any)?.remote;
+            } catch {
+              return undefined;
+            }
+          }
+
           async function sendRestart(): Promise<void> {
             if (ws && ws.readyState === WebSocket.OPEN) {
               try {
@@ -960,19 +975,23 @@ if (win?.__ModuleLoader__) {
               } catch {
                 // ignore
               }
-            } else if (ctx?.remote?.pluginManager) {
-              try {
-                await ctx.remote.pluginManager.setPluginEnabled('peripheral-server', true);
-              } catch {
-                // ignore
+            } else {
+              const remote = getRemoteService();
+              if (remote?.pluginManager) {
+                try {
+                  await remote.pluginManager.setPluginEnabled('peripheral-server', true);
+                } catch {
+                  // ignore
+                }
               }
             }
           }
 
           async function sendTogglePlugin(enable: boolean): Promise<void> {
-            if (ctx?.remote?.pluginManager) {
+            const remote = getRemoteService();
+            if (remote?.pluginManager) {
               try {
-                await ctx.remote.pluginManager.setPluginEnabled('peripheral-server', enable);
+                await remote.pluginManager.setPluginEnabled('peripheral-server', enable);
               } catch {
                 // ignore
               }
