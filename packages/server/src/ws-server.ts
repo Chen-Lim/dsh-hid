@@ -128,6 +128,9 @@ export class PeripheralWsServer {
     if (process.platform !== 'darwin' && process.platform !== 'linux') {
       return;
     }
+    if (!this.port || this.port === 0) {
+      return;
+    }
 
     const { execSync } = await import('node:child_process');
     const pids = execSync(`lsof -ti:${this.port} -sTCP:LISTEN`, { encoding: 'utf8' })
@@ -153,41 +156,65 @@ export class PeripheralWsServer {
   }
 
   private async bind(): Promise<void> {
-    try {
-      await this.reclaimPortFromStaleDsh();
-    } catch {
-      // Port preflight is best-effort; the bind error handler reports the real failure.
-    }
+    const maxRetries = 3;
+    const retryDelayMs = 200;
 
-    return new Promise((resolve, reject) => {
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {
-        this.wss = new WebSocketServer({
-          host: this.host,
-          port: this.port,
-          path: this.path,
-        });
+        await this.reclaimPortFromStaleDsh();
+      } catch {
+        // Port preflight is best-effort; the bind error handler reports the real failure.
+      }
 
-        this.wss.on('listening', () => {
-          this.started = true;
-          this.setupHeartbeat();
-          resolve();
-        });
+      try {
+        await new Promise<void>((resolve, reject) => {
+          try {
+            const wss = new WebSocketServer({
+              host: this.host,
+              port: this.port,
+              path: this.path,
+            });
+            this.wss = wss;
 
-        this.wss.on('error', (err) => {
-          if (!this.started) {
+            wss.on('listening', () => {
+              this.started = true;
+              this.setupHeartbeat();
+              resolve();
+            });
+
+            wss.on('error', (err: any) => {
+              if (!this.started) {
+                try {
+                  wss.close();
+                } catch {
+                  // ignore
+                }
+                this.wss = null;
+                reject(err);
+              } else {
+                console.error('[PeripheralWsServer] Server error:', err);
+              }
+            });
+
+            wss.on('connection', (ws: WebSocket, request) => {
+              this.handleConnection(ws as ExtWebSocket, request);
+            });
+          } catch (err) {
             reject(err);
-          } else {
-            console.error('[PeripheralWsServer] Server error:', err);
           }
         });
-
-        this.wss.on('connection', (ws: WebSocket, request) => {
-          this.handleConnection(ws as ExtWebSocket, request);
-        });
-      } catch (err) {
-        reject(err);
+        return;
+      } catch (err: any) {
+        if (attempt < maxRetries && err?.code === 'EADDRINUSE') {
+          console.warn(
+            `[PeripheralWsServer] Port ${this.port} is busy (EADDRINUSE), retrying (${attempt}/${maxRetries}) in ${retryDelayMs}ms...`
+          );
+          await new Promise((r) => setTimeout(r, retryDelayMs));
+          continue;
+        }
+        throw err;
       }
-    });
+    }
   }
 
   private handleConnection(client: ExtWebSocket, request?: { url?: string }): void {
@@ -535,7 +562,7 @@ export class PeripheralWsServer {
    * Gracefully shuts down the WebSocket server.
    */
   public async close(): Promise<void> {
-    if (!this.started || !this.wss) {
+    if (!this.started && !this.wss) {
       return;
     }
 
@@ -562,13 +589,19 @@ export class PeripheralWsServer {
     this.activeClients.clear();
     this.uiClients.clear();
 
+    const serverToClose = this.wss;
+    this.started = false;
+    this.wss = null;
+
+    if (!serverToClose) {
+      return;
+    }
+
     return new Promise((resolve) => {
       let settled = false;
       const done = () => {
         if (!settled) {
           settled = true;
-          this.started = false;
-          this.wss = null;
           resolve();
         }
       };
@@ -577,7 +610,7 @@ export class PeripheralWsServer {
       safetyTimer.unref();
 
       try {
-        this.wss?.close(() => {
+        serverToClose.close(() => {
           clearTimeout(safetyTimer);
           done();
         });

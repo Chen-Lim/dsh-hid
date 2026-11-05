@@ -29,6 +29,7 @@ export class DaemonManager {
 
   private child: ChildProcess | null = null;
   private isStopping = false;
+  private stopPromise: Promise<void> | null = null;
   private restartTimer: NodeJS.Timeout | null = null;
   private consecutiveRestarts = 0;
   private lastStartTime = 0;
@@ -134,6 +135,10 @@ export class DaemonManager {
    * Starts the daemon child process if not already running.
    */
   public async start(): Promise<boolean> {
+    if (this.stopPromise) {
+      await this.stopPromise;
+    }
+
     if (this.child && !this.child.killed) {
       return true;
     }
@@ -246,6 +251,18 @@ export class DaemonManager {
    * Stops the hardware daemon gracefully.
    */
   public async stop(): Promise<void> {
+    if (this.stopPromise) {
+      return this.stopPromise;
+    }
+    this.stopPromise = this.doStop();
+    try {
+      await this.stopPromise;
+    } finally {
+      this.stopPromise = null;
+    }
+  }
+
+  private async doStop(): Promise<void> {
     this.isStopping = true;
 
     // Unbind global process listeners to avoid memory leaks
