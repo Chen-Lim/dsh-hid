@@ -51,6 +51,12 @@ export interface PeripheralServerConfig {
    * Optional custom CLI arguments for the daemon.
    */
   daemonArgs?: string[];
+  /**
+   * Whether the peripheral service is enabled.
+   * If false, the server enters a dormant state without binding ports or spawning daemons.
+   * Defaults to true.
+   */
+  enabled?: boolean;
 }
 
 export interface DshSessionSummary {
@@ -119,6 +125,10 @@ export class PeripheralServerService extends Service {
   private readonly autoBindSlots: boolean;
   private readonly forceArbitration: boolean;
   private readonly autoStartDaemon: boolean;
+  private enabled: boolean;
+  private isStarted: boolean = false;
+  private startPromise: Promise<void> | null = null;
+  private stopPromise: Promise<void> | null = null;
   private transportState: TransportChangedParams = {
     transport: 'disconnected',
     capabilities: {
@@ -140,6 +150,7 @@ export class PeripheralServerService extends Service {
 
     this.autoBindSlots = config?.autoBindSlots ?? true;
     this.forceArbitration = config?.forceArbitration ?? false;
+    this.enabled = config?.enabled ?? true;
     this.router = new SessionRouter({ totalSlots: config?.totalSlots });
 
     const host = config?.host ?? DEFAULT_HOST;
@@ -261,6 +272,20 @@ export class PeripheralServerService extends Service {
         });
         return { success: true, slotIndex };
       },
+      onRestart: async () => {
+        await this.restart();
+        return { success: true };
+      },
+      getStatus: () => ({
+        isRunning: this.isRunning(),
+        isEnabled: this.isEnabled(),
+        port: this.wsServer.getPort(),
+        totalSlots: this.router.getSnapshot().slots.length,
+        clientCount: this.wsServer.getClientCount(),
+        hardwareClientCount: this.wsServer.getHardwareClientCount(),
+        uiClientCount: this.wsServer.getUiClientCount(),
+        transportState: this.transportState,
+      }),
     };
 
     this.wsServer = new PeripheralWsServer({
@@ -292,6 +317,11 @@ export class PeripheralServerService extends Service {
 
     // Auto-clean on Cordis fiber disposal (official Cordis lifecycle)
     this.ctx.effect(() => () => {
+      try {
+        this.localeBinding.dispose();
+      } catch {
+        // ignore
+      }
       return this.stop();
     }, 'peripheral-server:lifecycle');
 
@@ -300,8 +330,10 @@ export class PeripheralServerService extends Service {
       await this.stop();
     });
 
-    // Automatically start WebSocket server on initialization
-    void this.start();
+    // Automatically start WebSocket server on initialization if enabled
+    if (this.enabled) {
+      void this.start();
+    }
   }
 
   private ensureAndUpdateSession(
@@ -636,12 +668,133 @@ export class PeripheralServerService extends Service {
     }
   }
 
-  private startPromise: Promise<void> | null = null;
+  /**
+   * Returns whether the peripheral service is enabled.
+   */
+  public isEnabled(): boolean {
+    return this.enabled;
+  }
+
+  /**
+   * Returns whether the peripheral service is actively running and serving WebSocket clients.
+   */
+  public isRunning(): boolean {
+    return this.isStarted && this.wsServer.isRunning();
+  }
+
+  /**
+   * Hot-start: open/enable the peripheral server and daemon without restarting DeepSeek Harness.
+   */
+  public async open(): Promise<void> {
+    this.enabled = true;
+    await this.start();
+  }
+
+  /**
+   * Hot-stop: close/disable the peripheral server and daemon without restarting DeepSeek Harness.
+   */
+  public async close(): Promise<void> {
+    this.enabled = false;
+    await this.stop();
+  }
+
+  /**
+   * Hot-restart: completely stop and restart the peripheral bridge and daemon.
+   */
+  public async restart(): Promise<void> {
+    await this.stop();
+    await this.start();
+  }
+
+  /**
+   * Discovers and synchronizes existing live sessions from DeepSeek Harness runtime context.
+   * Ensures seamless hot-start state hydration without requiring conversation re-triggering.
+   */
+  public hydrateExistingSessions(): void {
+    if (!this.autoBindSlots) return;
+
+    try {
+      // 1. Query @deepseek-ai/dsh-session store if accessible
+      const sessionsStore = (this.ctx as any).sessions;
+      if (sessionsStore && typeof sessionsStore.list === 'function') {
+        const liveSessions = sessionsStore.list();
+        if (Array.isArray(liveSessions)) {
+          for (const session of liveSessions) {
+            const sessionId = typeof session === 'string' ? session : session?.id;
+            if (sessionId && !this.router.getSlotBySessionId(sessionId)) {
+              this.router.allocateSlot(sessionId, AgentPeripheralStatus.IDLE);
+            }
+          }
+        }
+      }
+
+      // 2. Query @deepseek-ai/dsh-agent registry if accessible
+      const agentsRegistry = (this.ctx as any).agents;
+      if (agentsRegistry && typeof agentsRegistry.list === 'function') {
+        const liveAgents = agentsRegistry.list();
+        if (Array.isArray(liveAgents)) {
+          for (const agent of liveAgents) {
+            const sessionId =
+              typeof agent === 'string' ? agent : (agent?.session?.id ?? agent?.id);
+            if (!sessionId) continue;
+            let slot = this.router.getSlotBySessionId(sessionId);
+            if (!slot) {
+              slot = this.router.allocateSlot(sessionId, AgentPeripheralStatus.IDLE);
+            }
+          }
+        }
+      }
+
+      // 3. Query api-session controller if accessible
+      const sessionController = (this.ctx as any).sessionController;
+      if (sessionController?.listState && typeof sessionController.listState.list === 'function') {
+        Promise.resolve(sessionController.listState.list())
+          .then((summaries: any[]) => {
+            if (Array.isArray(summaries)) {
+              for (const summary of summaries) {
+                const sessionId = summary?.sessionId ?? summary?.id;
+                if (!sessionId) continue;
+                const isRunning = Boolean(summary.running);
+                let slot = this.router.getSlotBySessionId(sessionId);
+                if (
+                  !slot &&
+                  (isRunning ||
+                    this.router
+                      .getSnapshot()
+                      .slots.filter((s) => s.status !== AgentPeripheralStatus.INACTIVE).length < 3)
+                ) {
+                  slot = this.router.allocateSlot(
+                    sessionId,
+                    isRunning ? AgentPeripheralStatus.RUNNING : AgentPeripheralStatus.IDLE
+                  );
+                }
+                if (slot && isRunning) {
+                  this.router.updateSlot(slot.slotIndex, { status: AgentPeripheralStatus.RUNNING });
+                  this.router.switchFocus(slot.slotIndex);
+                }
+              }
+            }
+          })
+          .catch(() => {});
+      }
+    } catch {
+      // Hot-start hydration is best-effort and must not throw
+    }
+  }
 
   /**
    * Starts the peripheral server and optionally the hardware daemon process.
    */
   public async start(): Promise<void> {
+    if (!this.enabled) {
+      return;
+    }
+    if (this.stopPromise) {
+      await this.stopPromise;
+    }
+    if (this.isStarted && this.wsServer.isRunning()) {
+      return;
+    }
     if (this.startPromise) {
       return this.startPromise;
     }
@@ -658,21 +811,40 @@ export class PeripheralServerService extends Service {
     if (this.autoStartDaemon) {
       void this.daemonManager.start();
     }
+    this.hydrateExistingSessions();
+    this.isStarted = true;
+    this.ctx.emit('peripheral/started');
   }
 
   protected async [Service.init](): Promise<void> {
-    await this.start();
+    if (this.enabled) {
+      await this.start();
+    }
   }
 
   /**
    * Stops the peripheral server and terminates active client connections and daemon process.
    */
   public async stop(): Promise<void> {
-    try {
-      this.localeBinding.dispose();
-    } catch {
-      // ignore
+    if (this.startPromise) {
+      await this.startPromise;
     }
+    if (this.stopPromise) {
+      return this.stopPromise;
+    }
+    if (!this.isStarted && !this.wsServer.isRunning() && !this.daemonManager.isRunning()) {
+      return;
+    }
+    this.stopPromise = this.doStop();
+    try {
+      await this.stopPromise;
+    } finally {
+      this.stopPromise = null;
+    }
+  }
+
+  private async doStop(): Promise<void> {
+    this.isStarted = false;
     try {
       this.arbiter.dispose();
     } catch {
@@ -682,6 +854,7 @@ export class PeripheralServerService extends Service {
       this.daemonManager.stop(),
       this.wsServer.close(),
     ]);
+    this.ctx.emit('peripheral/stopped');
   }
 }
 
@@ -727,5 +900,7 @@ declare module 'cordis' {
     'peripheral/option-selected'(slotIndex: number, optionIndex: number, action: OptionAction, sessionId: string | null): void;
     'peripheral/abort-requested'(slotIndex: number, sessionId: string | null): void;
     'peripheral/transport-changed'(params: TransportChangedParams): void;
+    'peripheral/started'(): void;
+    'peripheral/stopped'(): void;
   }
 }

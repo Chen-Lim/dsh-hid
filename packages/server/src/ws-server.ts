@@ -51,6 +51,8 @@ export interface PeripheralRpcHandler {
   onSessionOpened?(sessionId: string): Promise<{ success: boolean; slotIndex?: number }>;
   onTransportChanged?(params: TransportChangedParams): void | Promise<void>;
   getInitialSnapshot?(): SnapshotParams;
+  onRestart?(): Promise<{ success: boolean }>;
+  getStatus?(): Record<string, unknown>;
 }
 
 export interface PeripheralWsServerOptions {
@@ -427,6 +429,31 @@ export class PeripheralWsServer {
           }
           await this.handler?.onTransportChanged?.(transportParams);
           this.sendToClient(client, createJsonRpcSuccessResponse(id, { success: true }));
+          break;
+        }
+
+        case 'peripheral/restart': {
+          if (this.handler?.onRestart) {
+            const result = await this.handler.onRestart();
+            this.sendToClient(client, createJsonRpcSuccessResponse(id, result));
+          } else {
+            this.sendToClient(client, createJsonRpcSuccessResponse(id, { success: true }));
+          }
+          break;
+        }
+
+        case 'peripheral/getStatus': {
+          if (this.handler?.getStatus) {
+            const result = this.handler.getStatus();
+            this.sendToClient(client, createJsonRpcSuccessResponse(id, result));
+          } else {
+            this.sendToClient(client, createJsonRpcSuccessResponse(id, {
+              isRunning: this.isRunning(),
+              port: this.getPort(),
+              clientCount: this.getClientCount(),
+              hardwareClientCount: this.getHardwareClientCount(),
+            }));
+          }
           break;
         }
 
