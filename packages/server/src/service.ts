@@ -717,8 +717,24 @@ export class PeripheralServerService extends Service {
     if (!this.autoBindSlots) return;
 
     try {
+      const getContextService = (key: string): any => {
+        try {
+          const fromGet =
+            typeof (this.ctx as any).get === 'function'
+              ? (this.ctx as any).get(key)
+              : undefined;
+          return fromGet ?? (this.ctx as any)[key];
+        } catch {
+          try {
+            return (this.ctx as any)[key];
+          } catch {
+            return undefined;
+          }
+        }
+      };
+
       // 1. Query @deepseek-ai/dsh-session store if accessible
-      const sessionsStore = (this.ctx as any).sessions;
+      const sessionsStore = getContextService('sessions');
       if (sessionsStore && typeof sessionsStore.list === 'function') {
         const liveSessions = sessionsStore.list();
         if (Array.isArray(liveSessions)) {
@@ -732,7 +748,7 @@ export class PeripheralServerService extends Service {
       }
 
       // 2. Query @deepseek-ai/dsh-agent registry if accessible
-      const agentsRegistry = (this.ctx as any).agents;
+      const agentsRegistry = getContextService('agents');
       if (agentsRegistry && typeof agentsRegistry.list === 'function') {
         const liveAgents = agentsRegistry.list();
         if (Array.isArray(liveAgents)) {
@@ -749,7 +765,7 @@ export class PeripheralServerService extends Service {
       }
 
       // 3. Query api-session controller if accessible
-      const sessionController = (this.ctx as any).sessionController;
+      const sessionController = getContextService('sessionController');
       if (sessionController?.listState && typeof sessionController.listState.list === 'function') {
         Promise.resolve(sessionController.listState.list())
           .then((summaries: any[]) => {
