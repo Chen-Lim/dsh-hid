@@ -98,10 +98,18 @@ echo "==> [4/4] Synchronizing runtime files & configuring profile patches..."
 for PROFILE in desktop web; do
   PROFILE_DIR="$RESOLVED_DSH_HOME/profiles/$PROFILE"
   PLUGIN_DIR="$PROFILE_DIR/node_modules/dsh-plugin-peripheral-server"
+  PROTO_DIR="$PROFILE_DIR/node_modules/@dsh-hid/protocol"
 
   [ -d "$PROFILE_DIR" ] || continue
 
-  # A. Cleanly sync only distribution and metadata files (exclude dev node_modules, tests, and src)
+  # A. Cleanly sync @dsh-hid/protocol runtime files
+  mkdir -p "$PROTO_DIR"
+  rm -rf "$PROTO_DIR"/*
+  cp -r "$REPO_ROOT/packages/protocol/dist" "$PROTO_DIR/"
+  cp "$REPO_ROOT/packages/protocol/package.json" "$PROTO_DIR/"
+  [ -f "$REPO_ROOT/packages/protocol/README.md" ] && cp "$REPO_ROOT/packages/protocol/README.md" "$PROTO_DIR/"
+
+  # B. Cleanly sync dsh-plugin-peripheral-server runtime and metadata files
   mkdir -p "$PLUGIN_DIR"
   rm -rf "$PLUGIN_DIR"/*
   cp -r "$REPO_ROOT/packages/server/dist" "$PLUGIN_DIR/"
@@ -119,6 +127,10 @@ const pkg = JSON.parse(fs.readFileSync(p, 'utf8'));
 pkg.dependencies['@dsh-hid/protocol'] = 'file:$PROTO_TGZ';
 fs.writeFileSync(p, JSON.stringify(pkg, null, 2) + '\n');
 "
+
+  # C. Also replicate protocol into nested node_modules inside server for immediate resolution fallback
+  mkdir -p "$PLUGIN_DIR/node_modules/@dsh-hid/protocol"
+  cp -r "$PROTO_DIR"/* "$PLUGIN_DIR/node_modules/@dsh-hid/protocol/"
 
   # B. Safely update cordis.patch.yml:
   # - Strip any legacy nested '- insert: ... peripheral-server' entries (which double-bind ports)
