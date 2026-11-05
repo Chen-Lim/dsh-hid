@@ -55,6 +55,13 @@ export const EN_MESSAGES: MessageCatalog = {
   quickActions: 'Actions',
   activeSlot: 'Active Slot',
   noSession: 'No Session',
+  hotStart: 'Hot Start',
+  stopService: 'Stop Service',
+  restartService: 'Restart Service',
+  dormantNotice:
+    'Peripheral bridge service is stopped. You can click \'Hot Start\' at any time to resume hardware sync without restarting DeepSeek Harness.',
+  serviceRunning: 'Service Running',
+  serviceStopped: 'Service Stopped',
 };
 
 export const ZH_MESSAGES: MessageCatalog = {
@@ -99,6 +106,13 @@ export const ZH_MESSAGES: MessageCatalog = {
   quickActions: '操作',
   activeSlot: '当前槽位',
   noSession: '无会话',
+  hotStart: '热启动服务',
+  stopService: '关闭外设服务',
+  restartService: '重启服务',
+  dormantNotice:
+    '外设桥接服务已关闭。无须重启 DeepSeek Harness，点击“热启动服务”即可随时恢复外设硬件指示与按键交互。',
+  serviceRunning: '服务运行中',
+  serviceStopped: '服务已停止',
 };
 
 export const ZH_CN_MESSAGES: MessageCatalog = ZH_MESSAGES;

@@ -946,6 +946,47 @@ if (win?.__ModuleLoader__) {
             }
           }
 
+          async function sendRestart(): Promise<void> {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+              try {
+                ws.send(
+                  JSON.stringify({
+                    jsonrpc: '2.0',
+                    id: Date.now(),
+                    method: 'peripheral/restart',
+                    params: {},
+                  })
+                );
+              } catch {
+                // ignore
+              }
+            } else if (ctx?.remote?.pluginManager) {
+              try {
+                await ctx.remote.pluginManager.setPluginEnabled('peripheral-server', true);
+              } catch {
+                // ignore
+              }
+            }
+          }
+
+          async function sendTogglePlugin(enable: boolean): Promise<void> {
+            if (ctx?.remote?.pluginManager) {
+              try {
+                await ctx.remote.pluginManager.setPluginEnabled('peripheral-server', enable);
+              } catch {
+                // ignore
+              }
+            } else if (enable) {
+              connect();
+            } else if (ws) {
+              try {
+                ws.close();
+              } catch {
+                // ignore
+              }
+            }
+          }
+
           function playApprovalChime(): void {
             try {
               const AudioCtx =
@@ -1889,6 +1930,13 @@ if (win?.__ModuleLoader__) {
                   'div',
                   {
                     className: 'peripheral-page-head',
+                    style: {
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'flex-start',
+                      flexWrap: 'wrap',
+                      gap: '12px',
+                    },
                   },
                   h(
                     'div',
@@ -1961,8 +2009,137 @@ if (win?.__ModuleLoader__) {
                       },
                       t('subtitle')
                     )
+                  ),
+                  h(
+                    'div',
+                    {
+                      style: {
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '8px',
+                      },
+                    },
+                    current.connected
+                      ? [
+                          h(
+                            'button',
+                            {
+                              key: 'restart-btn',
+                              type: 'button',
+                              'data-testid': 'peripheral-restart-button',
+                              style: {
+                                padding: '4px 10px',
+                                fontSize: '12px',
+                                borderRadius: '6px',
+                                border: '1px solid var(--dsw-alias-border-l1)',
+                                background: 'var(--dsw-alias-bg-layer-1)',
+                                color: 'var(--dsw-alias-label-primary)',
+                                cursor: 'pointer',
+                              },
+                              onClick: () => {
+                                void sendRestart();
+                              },
+                            },
+                            t('restartService')
+                          ),
+                          h(
+                            'button',
+                            {
+                              key: 'stop-btn',
+                              type: 'button',
+                              'data-testid': 'peripheral-stop-button',
+                              style: {
+                                padding: '4px 10px',
+                                fontSize: '12px',
+                                borderRadius: '6px',
+                                border: '1px solid var(--dsw-alias-border-l1)',
+                                background: 'var(--dsw-alias-bg-layer-1)',
+                                color: 'var(--dsw-alias-state-error-primary)',
+                                cursor: 'pointer',
+                              },
+                              onClick: () => {
+                                void sendTogglePlugin(false);
+                              },
+                            },
+                            t('stopService')
+                          ),
+                        ]
+                      : h(
+                          'button',
+                          {
+                            type: 'button',
+                            'data-testid': 'peripheral-hot-start-header-button',
+                            style: {
+                              padding: '4px 12px',
+                              fontSize: '12px',
+                              fontWeight: 500,
+                              borderRadius: '6px',
+                              border: 'none',
+                              background: 'var(--dsw-alias-state-success-primary)',
+                              color: '#ffffff',
+                              cursor: 'pointer',
+                            },
+                            onClick: () => {
+                              void sendTogglePlugin(true);
+                            },
+                          },
+                          t('hotStart')
+                        )
                   )
                 ),
+                !current.connected
+                  ? h(
+                      'div',
+                      {
+                        role: 'status',
+                        'data-testid': 'peripheral-dormant-notice',
+                        style: {
+                          margin: '0 0 14px',
+                          padding: '10px 14px',
+                          borderRadius: '8px',
+                          border: '1px solid var(--dsw-alias-border-l1)',
+                          background: 'var(--dsw-alias-bg-layer-1)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          gap: '12px',
+                        },
+                      },
+                      h(
+                        'span',
+                        {
+                          style: {
+                            fontSize: '12px',
+                            lineHeight: 1.5,
+                            color: 'var(--dsw-alias-label-secondary)',
+                          },
+                        },
+                        t('dormantNotice')
+                      ),
+                      h(
+                        'button',
+                        {
+                          type: 'button',
+                          'data-testid': 'peripheral-hot-start-button',
+                          style: {
+                            padding: '6px 14px',
+                            fontSize: '12px',
+                            fontWeight: 500,
+                            borderRadius: '6px',
+                            border: 'none',
+                            background: 'var(--dsw-alias-state-success-primary)',
+                            color: '#ffffff',
+                            cursor: 'pointer',
+                            whiteSpace: 'nowrap',
+                          },
+                          onClick: () => {
+                            void sendTogglePlugin(true);
+                          },
+                        },
+                        t('hotStart')
+                      )
+                    )
+                  : null,
                 isBluetoothFallback
                   ? h(
                       'div',
