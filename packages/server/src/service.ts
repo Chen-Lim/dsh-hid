@@ -273,7 +273,10 @@ export class PeripheralServerService extends Service {
         return { success: true, slotIndex };
       },
       onRestart: async () => {
-        await this.restart();
+        // Defer restarting slightly to allow JSON-RPC response frame to flush through WebSocket
+        setTimeout(() => {
+          void this.restart();
+        }, 50);
         return { success: true };
       },
       getStatus: () => ({
