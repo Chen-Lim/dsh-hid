@@ -38,25 +38,50 @@ if [ -x "$DSH_BIN" ]; then
   "$DSH_BIN" plugin --profile web add "$SERVER_TGZ"
 
   # Sync fresh server files directly into profiles to avoid pnpm tarball cache
-  rm -rf "$HOME/.dsh/profiles/desktop/node_modules/dsh-plugin-peripheral-server"
-  cp -r "$REPO_ROOT/packages/server" "$HOME/.dsh/profiles/desktop/node_modules/dsh-plugin-peripheral-server"
-  rm -rf "$HOME/.dsh/profiles/web/node_modules/dsh-plugin-peripheral-server"
-  cp -r "$REPO_ROOT/packages/server" "$HOME/.dsh/profiles/web/node_modules/dsh-plugin-peripheral-server"
+  DAEMON_BIN="$REPO_ROOT/packages/daemon/bin/dsh-daemon"
+  for PROFILE in desktop web; do
+    PLUGIN_DIR="$HOME/.dsh/profiles/$PROFILE/node_modules/dsh-plugin-peripheral-server"
+    rm -rf "$PLUGIN_DIR"
+    cp -r "$REPO_ROOT/packages/server" "$PLUGIN_DIR"
+    # The copied tree keeps the workspace protocol, which a profile cannot resolve.
+    node -e "
+const fs = require('fs');
+const p = '$PLUGIN_DIR/package.json';
+const pkg = JSON.parse(fs.readFileSync(p, 'utf8'));
+pkg.dependencies['@dsh-hid/protocol'] = 'file:$PROTO_TGZ';
+fs.writeFileSync(p, JSON.stringify(pkg, null, 2) + '\\n');
+"
+  done
 
-  # Ensure cordis.patch.yml has the peripheral-server insert entry
+  # `dsh plugin add` registers the package as a profile bundle, whose own
+  # cordis.patch.yml already mounts it once. A second insert with the same id
+  # would double-bind the WebSocket port, so the user layer only overrides the
+  # config, and only points the plugin at this checkout's compiled daemon —
+  # DaemonManager's auto-discovery looks for ~/project/dsh-hid, not this path.
   for PROFILE in desktop web; do
     PATCH_FILE="$HOME/.dsh/profiles/$PROFILE/cordis.patch.yml"
-    if [ -f "$PATCH_FILE" ] && ! grep -q "peripheral-server" "$PATCH_FILE"; then
-      cat << 'EOF' >> "$PATCH_FILE"
-- insert:
-    - id: peripheral-server
-      name: "dsh-plugin-peripheral-server"
-      config:
-        port: 45678
-        autoBindSlots: true
-        autoDaemon: true
-EOF
-    fi
+    [ -f "$PATCH_FILE" ] || continue
+    node -e "
+const fs = require('fs');
+const file = '$PATCH_FILE';
+const daemon = '$DAEMON_BIN';
+let text = fs.readFileSync(file, 'utf8');
+if (/id:\s*peripheral-server/.test(text)) process.exit(0);
+const block = [
+  '# HID peripheral bridge: the bundle mounts this id already; override, do not insert.',
+  '- id: peripheral-server',
+  '  config:',
+  '    port: 45678',
+  '    autoBindSlots: true',
+  '    autoStartDaemon: true',
+  '    daemonPath: \"' + daemon + '\"',
+].join('\n');
+// A patch layer is a YAML array; an empty \`[]\` placeholder must be replaced, not extended.
+text = /^\[\]\s*$/m.test(text)
+  ? text.replace(/^\[\]\s*$/m, block)
+  : text.trimEnd() + '\n' + block;
+fs.writeFileSync(file, text.endsWith('\n') ? text : text + '\n');
+"
   done
 
   echo "==> Successfully installed into DeepSeek Harness profiles!"

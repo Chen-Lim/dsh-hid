@@ -631,10 +631,24 @@ export class PeripheralServerService extends Service {
     }
   }
 
+  private startPromise: Promise<void> | null = null;
+
   /**
    * Starts the peripheral server and optionally the hardware daemon process.
    */
   public async start(): Promise<void> {
+    if (this.startPromise) {
+      return this.startPromise;
+    }
+    this.startPromise = this.doStart();
+    try {
+      await this.startPromise;
+    } finally {
+      this.startPromise = null;
+    }
+  }
+
+  private async doStart(): Promise<void> {
     await this.wsServer.start();
     if (this.autoStartDaemon) {
       void this.daemonManager.start();

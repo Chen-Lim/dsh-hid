@@ -89,6 +89,8 @@ export class PeripheralWsServer {
   private activeClients: Set<ExtWebSocket> = new Set();
   private uiClients: Set<ExtWebSocket> = new Set();
   private started: boolean = false;
+  /** Shared in-flight bind, so a second `start()` joins the first instead of rebinding. */
+  private starting: Promise<void> | null = null;
 
   constructor(options?: PeripheralWsServerOptions) {
     this.host = options?.host ?? DEFAULT_HOST;
@@ -105,16 +107,56 @@ export class PeripheralWsServer {
     if (this.started) {
       return;
     }
+    if (this.starting) {
+      return this.starting;
+    }
 
-    if (process.platform === 'darwin' || process.platform === 'linux') {
+    this.starting = this.bind();
+    try {
+      await this.starting;
+    } finally {
+      this.starting = null;
+    }
+  }
+
+  /**
+   * Reclaims the port from a stale DSH process only. Unrelated listeners are left
+   * alone: silently `kill -9`ing whatever happens to hold the port would take out
+   * unrelated applications.
+   */
+  private async reclaimPortFromStaleDsh(): Promise<void> {
+    if (process.platform !== 'darwin' && process.platform !== 'linux') {
+      return;
+    }
+
+    const { execSync } = await import('node:child_process');
+    const pids = execSync(`lsof -ti:${this.port} -sTCP:LISTEN`, { encoding: 'utf8' })
+      .split('\n')
+      .map((pid) => pid.trim())
+      .filter((pid) => pid.length > 0 && pid !== String(process.pid));
+
+    for (const pid of pids) {
+      let commandLine = '';
       try {
-        const { execSync } = await import('node:child_process');
-        execSync(`lsof -ti:${this.port} | grep -v "^${process.pid}$" | xargs kill -9 2>/dev/null || true`, {
-          stdio: 'ignore',
-        });
+        commandLine = execSync(`ps -p ${pid} -o command=`, { encoding: 'utf8' });
       } catch {
-        // ignore
+        continue;
       }
+      if (/DeepSeek Harness|dsh-daemon|dsh-hid/.test(commandLine)) {
+        execSync(`kill -9 ${pid} 2>/dev/null || true`, { stdio: 'ignore' });
+      } else {
+        console.warn(
+          `[PeripheralWsServer] Port ${this.port} is held by an unrelated process (${pid}); leaving it untouched.`
+        );
+      }
+    }
+  }
+
+  private async bind(): Promise<void> {
+    try {
+      await this.reclaimPortFromStaleDsh();
+    } catch {
+      // Port preflight is best-effort; the bind error handler reports the real failure.
     }
 
     return new Promise((resolve, reject) => {
