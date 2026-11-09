@@ -1,36 +1,12 @@
 {
   "name": "@dsh-hid/protocol",
   "version": "1.0.0",
-  "description": "Shared protocol models and JSON-RPC codec for DeepSeek Harness HID peripheral bridge",
+  "private": true,
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
-    ".": {
-      "types": "./dist/index.d.ts",
-      "import": "./dist/index.js"
-    }
+    ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" }
   },
-  "files": [
-    "dist"
-  ],
-  "scripts": {
-    "build": "tsc -b",
-    "clean": "rm -rf dist *.tsbuildinfo",
-    "typecheck": "tsc -b",
-    "test": "vitest run"
-  },
-  "keywords": [
-    "deepseek-harness",
-    "cordis",
-    "hid",
-    "json-rpc",
-    "protocol"
-  ],
-  "author": "Chen-Lim",
-  "license": "MIT",
-  "devDependencies": {
-    "typescript": "^5.7.3",
-    "vitest": "^3.0.7"
-  }
+  "license": "MIT"
 }

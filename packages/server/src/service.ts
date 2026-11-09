@@ -6,7 +6,7 @@ import {
   type OptionAction,
   type SlotInfo,
   type TransportChangedParams,
-  DEFAULT_PORT,
+  DEFAULT_DSH_PORT,
   DEFAULT_HOST,
   DEFAULT_PATH,
 } from '@dsh-hid/protocol';
@@ -154,7 +154,7 @@ export class PeripheralServerService extends Service {
     this.router = new SessionRouter({ totalSlots: config?.totalSlots });
 
     const host = config?.host ?? DEFAULT_HOST;
-    const port = config?.port ?? DEFAULT_PORT;
+    const port = config?.port ?? DEFAULT_DSH_PORT;
     const wsPath = config?.path ?? DEFAULT_PATH;
     const wsUrl = `ws://${host}:${port}${wsPath}`;
 
@@ -293,7 +293,7 @@ export class PeripheralServerService extends Service {
 
     this.wsServer = new PeripheralWsServer({
       host: config?.host ?? DEFAULT_HOST,
-      port: config?.port ?? DEFAULT_PORT,
+      port: config?.port ?? DEFAULT_DSH_PORT,
       path: config?.path ?? DEFAULT_PATH,
       handler: rpcHandler,
     });

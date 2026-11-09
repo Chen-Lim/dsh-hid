@@ -1,49 +1,17 @@
 {
   "name": "@dsh-hid/daemon",
   "version": "1.0.0",
-  "description": "Hardware daemon for DSH peripheral bridge supporting Mock, VIA Raw HID and Nuphy Air V3 adapters",
+  "private": true,
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
-  "bin": {
-    "dsh-daemon": "./dist/cli.js"
-  },
   "exports": {
-    ".": {
-      "types": "./dist/index.d.ts",
-      "import": "./dist/index.js"
-    }
+    ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" }
   },
-  "files": [
-    "dist"
-  ],
-  "scripts": {
-    "build": "tsc -b && pnpm run build:native",
-    "build:native": "mkdir -p bin && swiftc -swift-version 6 -strict-concurrency=complete -O native/DshDaemon.swift -o bin/dsh-daemon",
-    "postbuild": "chmod +x dist/cli.js",
-    "clean": "rm -rf dist bin *.tsbuildinfo",
-    "typecheck": "tsc -b",
-    "test": "vitest run",
-    "test:native": "./bin/dsh-daemon --self-test"
-  },
-  "keywords": [
-    "deepseek-harness",
-    "hid",
-    "daemon",
-    "via",
-    "nuphy"
-  ],
-  "author": "Chen-Lim",
-  "license": "MIT",
   "dependencies": {
     "@dsh-hid/protocol": "workspace:*",
-    "ws": "^8.18.0"
+    "ws": "8.22.1"
   },
-  "devDependencies": {
-    "@types/ws": "^8.5.14",
-    "cordis": "^4.0.0-rc.12",
-    "dsh-plugin-peripheral-server": "workspace:*",
-    "typescript": "^5.7.3",
-    "vitest": "^3.0.7"
-  }
+  "devDependencies": { "@types/ws": "8.18.2" },
+  "license": "MIT"
 }

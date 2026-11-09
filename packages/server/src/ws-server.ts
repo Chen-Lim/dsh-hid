@@ -1,7 +1,7 @@
 import { WebSocketServer, WebSocket } from 'ws';
 import {
   DEFAULT_HOST,
-  DEFAULT_PORT,
+  DEFAULT_DSH_PORT,
   DEFAULT_PATH,
   METHOD_SWITCH_FOCUS,
   METHOD_SET_BRAINPOWER,
@@ -96,7 +96,7 @@ export class PeripheralWsServer {
 
   constructor(options?: PeripheralWsServerOptions) {
     this.host = options?.host ?? DEFAULT_HOST;
-    this.port = options?.port ?? DEFAULT_PORT;
+    this.port = options?.port ?? DEFAULT_DSH_PORT;
     this.path = options?.path ?? DEFAULT_PATH;
     this.handler = options?.handler;
     this.heartbeatIntervalMs = options?.heartbeatIntervalMs ?? 30000;

@@ -6,7 +6,7 @@ describe('CLI Argument Parser and Adapter Factory', () => {
     const args = parseArgs([]);
     expect(args.adapter).toBe('mock');
     expect(args.help).toBe(false);
-    expect(args.url).toContain('45678');
+    expect(args.url).toContain('45679');
   });
 
   it('parses custom adapter and url options', () => {

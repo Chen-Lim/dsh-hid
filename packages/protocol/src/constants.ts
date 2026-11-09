@@ -8,7 +8,11 @@ export const PROTOCOL_VERSION = '0.1.0-alpha';
  * Default network connection parameters for Server <-> Daemon communication.
  */
 export const DEFAULT_HOST = '127.0.0.1';
-export const DEFAULT_PORT = 45678;
+export const DEFAULT_DSH_PORT = 45678;
+export const DEFAULT_TRAE_PORT = 45679;
+export const DEFAULT_PORT = (typeof process !== 'undefined' && process.env?.PERIPHERAL_PORT)
+  ? parseInt(process.env.PERIPHERAL_PORT, 10)
+  : DEFAULT_TRAE_PORT;
 export const DEFAULT_PATH = '/peripheral/v1';
 export const DEFAULT_WS_URL = `ws://${DEFAULT_HOST}:${DEFAULT_PORT}${DEFAULT_PATH}`;
 

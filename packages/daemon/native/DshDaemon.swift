@@ -415,6 +415,208 @@ func parseColors(_ value: Any?, count: Int) throws -> [UInt8] {
 
 // Device profiles keep the USB identity, protocol schema and restoration
 // namespace together. A Kick is never treated as an Air with fewer LEDs.
+enum TraeDesktopFocus {
+    static func isProjectContainer(role: String, name: String, boundTitle: String, childCount: Int) -> Bool {
+        role == kAXButtonRole && childCount > 0 && name != boundTitle && name.contains(boundTitle)
+    }
+    static func isTaskHeader(buttonNames: [String]) -> Bool {
+        buttonNames.contains("打开 Trae IDE") && buttonNames.contains("分享")
+    }
+
+    static func uniqueTargetIndex(_ matches: [Bool]) throws -> Int {
+        let indices = matches.indices.filter { matches[$0] }
+        guard !indices.isEmpty else {
+            throw failure("FOCUS_TARGET_NOT_FOUND", "No accessible sidebar action matches the bound title. Make the chat visible in Trae.")
+        }
+        guard indices.count == 1 else {
+            throw failure("FOCUS_TARGET_AMBIGUOUS", "Multiple sidebar actions match the bound title. Rename the chats to unique titles.")
+        }
+        return indices[0]
+    }
+
+    static func focus(title: String) throws -> [String: Any] {
+        guard !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            throw failure("INVALID_FOCUS_TITLE", "An exact sidebar title is required.")
+        }
+        guard AXIsProcessTrusted() else {
+            throw failure("ACCESSIBILITY_REQUIRED", "Enable Accessibility for the application launching keyboard-daemon.")
+        }
+        let apps = NSRunningApplication.runningApplications(withBundleIdentifier: "cn.trae.app")
+        guard apps.count == 1, let app = apps.first else {
+            throw failure("TRAE_NOT_RUNNING", "Keep one Trae CN instance running.")
+        }
+        let root = AXUIElementCreateApplication(app.processIdentifier)
+        AXUIElementSetMessagingTimeout(root, 0.2)
+        // Electron may expose only its desktop shell until an AX client enables
+        // renderer accessibility. Activate before inspecting hidden app windows.
+        _ = AXUIElementSetAttributeValue(root, "AXManualAccessibility" as CFString, kCFBooleanTrue)
+        _ = AXUIElementSetAttributeValue(root, "AXEnhancedUserInterface" as CFString, kCFBooleanTrue)
+        guard app.activate(options: []) else {
+            throw failure("FOCUS_ACTIVATION_FAILED", "Trae could not be brought to the foreground.")
+        }
+        RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.1))
+        func attribute(_ element: AXUIElement, _ name: String) -> AnyObject? {
+            var value: CFTypeRef?
+            guard AXUIElementCopyAttributeValue(element, name as CFString, &value) == .success else { return nil }
+            return value
+        }
+        func accessibleName(_ element: AXUIElement) -> String {
+            [kAXTitleAttribute, kAXDescriptionAttribute].compactMap { attribute(element, $0) as? String }
+                .first { !$0.isEmpty } ?? ""
+        }
+        var windows = attribute(root, kAXWindowsAttribute) as? [AXUIElement] ?? []
+        // A minimized Solo window can disappear from AXWindows entirely. The
+        // observed Window → Agent menu restores it without guessing a URL.
+        if !windows.contains(where: { accessibleName($0) == "Agent" }),
+           let menuBarValue = attribute(root, kAXMenuBarAttribute),
+           CFGetTypeID(menuBarValue) == AXUIElementGetTypeID() {
+            let menuBar = unsafeDowncast(menuBarValue, to: AXUIElement.self)
+            let windowMenus = (attribute(menuBar, kAXChildrenAttribute) as? [AXUIElement] ?? [])
+                .filter { ["窗口", "Window"].contains(accessibleName($0)) }
+            if windowMenus.count == 1 {
+                _ = AXUIElementPerformAction(windowMenus[0], kAXPressAction as CFString)
+                func agentItems(_ node: AXUIElement, depth: Int) -> [AXUIElement] {
+                    guard depth < 4 else { return [] }
+                    if attribute(node, kAXRoleAttribute) as? String == kAXMenuItemRole && accessibleName(node) == "Agent" {
+                        return [node]
+                    }
+                    return (attribute(node, kAXChildrenAttribute) as? [AXUIElement] ?? [])
+                        .flatMap { agentItems($0, depth: depth + 1) }
+                }
+                let items = agentItems(windowMenus[0], depth: 0)
+                if items.count == 1 { _ = AXUIElementPerformAction(items[0], kAXPressAction as CFString) }
+                RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.1))
+                windows = attribute(root, kAXWindowsAttribute) as? [AXUIElement] ?? []
+            }
+        }
+        if let agentWindow = windows.first(where: { accessibleName($0) == "Agent" }) {
+            _ = AXUIElementPerformAction(agentWindow, kAXRaiseAction as CFString)
+            RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.1))
+        }
+        let trace = ProcessInfo.processInfo.environment["KEYBOARD_FOCUS_TRACE"] == "1"
+        if trace { diagnostic("Focus trace: windows=\(windows.count)") }
+        var targets = [(element: AXUIElement, window: AXUIElement, directPress: Bool)]()
+        var contentTitleCount = 0
+        var visited = 0
+        let deadline = ProcessInfo.processInfo.systemUptime + 3.0
+        func visit(_ element: AXUIElement, window: AXUIElement, inProject: Bool,
+                   inAction: Bool, inHeader: Bool, exactPressAncestor: Bool, depth: Int, tracePath: [String] = []) throws {
+            visited += 1
+            guard visited <= 12000, depth < 100, ProcessInfo.processInfo.systemUptime < deadline else {
+                throw failure("FOCUS_TREE_INCOMPLETE", "Trae accessibility tree could not be fully checked; no chat was clicked.")
+            }
+            var actions: CFArray?
+            _ = AXUIElementCopyActionNames(element, &actions)
+            let role = attribute(element, kAXRoleAttribute) as? String ?? ""
+            let allowedRoles = [kAXButtonRole, kAXRowRole, kAXCellRole, kAXGroupRole]
+            let canPress = allowedRoles.contains(role) && (actions as? [String] ?? []).contains(kAXPressAction)
+            let children = attribute(element, kAXChildrenAttribute) as? [AXUIElement] ?? []
+            let name = accessibleName(element)
+            let childInProject = inProject || isProjectContainer(role: role, name: name, boundTitle: title, childCount: children.count)
+            let childInHeader = inHeader || isTaskHeader(buttonNames: children.filter {
+                attribute($0, kAXRoleAttribute) as? String == kAXButtonRole
+            }.map { accessibleName($0) })
+            let exactName = [kAXTitleAttribute, kAXDescriptionAttribute, kAXValueAttribute].contains {
+                attribute(element, $0) as? String == title
+            }
+            if trace && exactName {
+                diagnostic("Focus trace: match role=\(role) project=\(inProject) action=\(canPress) header=\(inHeader) ancestor=\(exactPressAncestor)")
+                diagnostic("Focus trace: parents=\(tracePath.suffix(6).joined(separator: " / "))")
+            }
+            // Static task names inside the composite project button are click
+            // targets themselves. Pressing that ancestor would collapse the project.
+            if exactName && !exactPressAncestor && (canPress || (inProject && role == kAXStaticTextRole)),
+               attribute(element, kAXEnabledAttribute) as? Bool != false {
+                if !targets.contains(where: { CFEqual($0.element, element) }) {
+                    targets.append((element, window, canPress))
+                }
+            }
+            if exactName && role == kAXStaticTextRole && inHeader && !inProject && !inAction { contentTitleCount += 1 }
+            for child in children {
+                try visit(child, window: window, inProject: childInProject,
+                          inAction: inAction || (canPress && role != kAXGroupRole),
+                          inHeader: childInHeader, exactPressAncestor: exactPressAncestor || (exactName && canPress), depth: depth + 1,
+                          tracePath: trace ? tracePath + ["\(role):nameLength=\(name.count):contains=\(name.contains(title)):children=\(children.count):press=\(canPress)"] : [])
+            }
+        }
+        for window in windows {
+            try visit(window, window: window, inProject: false, inAction: false, inHeader: false, exactPressAncestor: false, depth: 0)
+        }
+        if trace { diagnostic("Focus trace: visited=\(visited) targets=\(targets.count) headers=\(contentTitleCount)") }
+        let index = try uniqueTargetIndex(targets.map { _ in true })
+        let target = targets[index]
+        _ = AXUIElementPerformAction(target.window, kAXRaiseAction as CFString)
+        guard app.activate(options: []) else {
+            throw failure("FOCUS_ACTIVATION_FAILED", "Trae could not be brought to the foreground.")
+        }
+        RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.1))
+        guard NSWorkspace.shared.frontmostApplication?.processIdentifier == app.processIdentifier else {
+            throw failure("FOCUS_ACTIVATION_FAILED", "Trae did not become the foreground application.")
+        }
+        targets.removeAll(); contentTitleCount = 0; visited = 0
+        try visit(target.window, window: target.window, inProject: false, inAction: false, inHeader: false, exactPressAncestor: false, depth: 0)
+        if contentTitleCount == 1 {
+            return ["success": true, "action": "alreadyVisible", "title": title, "titleVerified": true]
+        }
+        let refreshedIndex = try uniqueTargetIndex(targets.map { _ in true })
+        guard CFEqual(targets[refreshedIndex].element, target.element) else {
+            throw failure("FOCUS_TARGET_CHANGED", "The sidebar changed while bringing Trae to the foreground.")
+        }
+        let action: String
+        if target.directPress {
+            guard AXUIElementPerformAction(target.element, kAXPressAction as CFString) == .success else {
+                throw failure("FOCUS_ACTION_FAILED", "Trae rejected the sidebar accessibility action.")
+            }
+            action = "AXPress"
+        } else {
+            guard CGPreflightPostEventAccess(),
+                  let position = attribute(target.element, kAXPositionAttribute),
+                  let size = attribute(target.element, kAXSizeAttribute),
+                  CFGetTypeID(position) == AXValueGetTypeID(), CFGetTypeID(size) == AXValueGetTypeID() else {
+                throw failure("FOCUS_POSITION_UNAVAILABLE", "The sidebar title has no accessible click geometry or event-posting permission.")
+            }
+            var point = CGPoint.zero, dimensions = CGSize.zero
+            guard AXValueGetValue(unsafeDowncast(position, to: AXValue.self), .cgPoint, &point),
+                  AXValueGetValue(unsafeDowncast(size, to: AXValue.self), .cgSize, &dimensions),
+                  dimensions.width > 0, dimensions.height > 0 else {
+                throw failure("FOCUS_POSITION_UNAVAILABLE", "The sidebar title is not visible.")
+            }
+            point.x += dimensions.width / 2; point.y += dimensions.height / 2
+            guard point.x.isFinite, point.y.isFinite,
+                  let windowPosition = attribute(target.window, kAXPositionAttribute),
+                  let windowSize = attribute(target.window, kAXSizeAttribute),
+                  CFGetTypeID(windowPosition) == AXValueGetTypeID(), CFGetTypeID(windowSize) == AXValueGetTypeID() else {
+                throw failure("FOCUS_POSITION_UNAVAILABLE", "The title could not be located in its window.")
+            }
+            var origin = CGPoint.zero, windowDimensions = CGSize.zero
+            guard AXValueGetValue(unsafeDowncast(windowPosition, to: AXValue.self), .cgPoint, &origin),
+                  AXValueGetValue(unsafeDowncast(windowSize, to: AXValue.self), .cgSize, &windowDimensions),
+                  CGRect(origin: origin, size: windowDimensions).contains(point) else {
+                throw failure("FOCUS_POSITION_UNAVAILABLE", "The sidebar title is outside the visible window.")
+            }
+            guard let down = CGEvent(mouseEventSource: nil, mouseType: .leftMouseDown, mouseCursorPosition: point, mouseButton: .left),
+                  let up = CGEvent(mouseEventSource: nil, mouseType: .leftMouseUp, mouseCursorPosition: point, mouseButton: .left) else {
+                throw failure("FOCUS_ACTION_FAILED", "Could not click the accessible sidebar title.")
+            }
+            down.post(tap: .cghidEventTap); up.post(tap: .cghidEventTap)
+            action = "accessibleTitleClick"
+        }
+        // Verify a content title outside the sidebar, not merely a successful click.
+        // Yield to the application between bounded observations.
+        while ProcessInfo.processInfo.systemUptime < deadline {
+            RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.1))
+            targets.removeAll(); contentTitleCount = 0; visited = 0
+            try visit(target.window, window: target.window, inProject: false,
+                      inAction: false, inHeader: false, exactPressAncestor: false, depth: 0)
+            if contentTitleCount == 1 {
+                return ["success": true, "action": action, "title": title, "titleVerified": true]
+            }
+        }
+        throw failure("FOCUS_NOT_VERIFIED", "Trae did not expose a unique matching content title after navigation.")
+    }
+}
+
+
 enum USBKeyboardModel: String, CaseIterable, Sendable {
     var defaultProductID: Int {
         switch self {
@@ -3241,9 +3443,21 @@ final class DshJsonRpcSession {
     }
 }
 
+struct FocusKeyConsumption {
+    private var held = Set<Int>()
+    mutating func begin(_ code: Int) { held.insert(code) }
+    mutating func consumeContinuation(_ type: CGEventType, code: Int) -> Bool {
+        if type == .keyUp { return held.remove(code) != nil }
+        return type == .keyDown && held.contains(code)
+    }
+    mutating func reset() { held.removeAll() }
+}
+
 final class DshWebSocketDaemon: @unchecked Sendable {
     let url: URL
     let server: JSONServer
+    let statusOnly: Bool
+    let focusOnly: Bool
     let rpcSession = DshJsonRpcSession()
     private let urlSession = URLSession(configuration: .default)
     private var wsTask: URLSessionWebSocketTask?
@@ -3252,6 +3466,8 @@ final class DshWebSocketDaemon: @unchecked Sendable {
     private var keyTap: CFMachPort?
     private var keyTapSource: CFRunLoopSource?
     private var permissionRetryTimer: DispatchSourceTimer?
+    private var permissionPromptsRequested = false
+    private var consumedFocusKeys = FocusKeyConsumption()
     private var lastAdaptedSlots = [Int]()
     private var lastReportedTransport = ""
     private var btLedIlluminated = false
@@ -3280,9 +3496,11 @@ final class DshWebSocketDaemon: @unchecked Sendable {
         return env["DSH_HID_MOCK"] == "1" || env["VITEST"] == "true"
     }
 
-    init(url: URL, server: JSONServer) {
+    init(url: URL, server: JSONServer, statusOnly: Bool = false, focusOnly: Bool = false) {
         self.url = url
         self.server = server
+        self.statusOnly = statusOnly
+        self.focusOnly = focusOnly
     }
 
     func start() {
@@ -3291,7 +3509,8 @@ final class DshWebSocketDaemon: @unchecked Sendable {
         if !hardwareMockMode && server.device.recoveryPending {
             _ = try? server.device.restore()
         }
-        emit(["event": "dshDaemonStarted", "url": url.absoluteString])
+        emit(["event": "dshDaemonStarted", "url": url.absoluteString,
+              "inputMode": statusOnly ? "status-only" : (focusOnly ? "focus-only" : "full")])
         if !hardwareMockMode {
             startGlobalKeyTapIfPermitted()
             startPermissionCheckLoop()
@@ -4450,7 +4669,36 @@ func testDshJsonRpcAndRenderingLifecycle(_ check: (Bool, String) throws -> Void)
     try check(board.d8Packets == 1, "subsequent animated DSH frame sends only 1 delta D8 packet (<= 13 changed keys)")
     try check(device.shutdown(), "DSH virtual board restores original lighting cleanly on shutdown")
 
-    // 5. 8-Model profile matrix validation
+        try check(try TraeDesktopFocus.uniqueTargetIndex([false, true, false]) == 1, "exact unique focus target selected")
+    try check(TraeDesktopFocus.isProjectContainer(role: kAXButtonRole, name: "与 keyboard 对话 调查任务 另一个任务",
+                                                 boundTitle: "调查任务", childCount: 1),
+              "composite project button contains task titles but must not be pressed as a task")
+    try check(!TraeDesktopFocus.isProjectContainer(role: kAXButtonRole, name: "调查任务", boundTitle: "调查任务", childCount: 3),
+              "an exactly named task button remains its own target")
+    try check(!TraeDesktopFocus.isProjectContainer(role: kAXButtonRole, name: "Navigate to message: 调查任务",
+                                                  boundTitle: "调查任务", childCount: 0),
+              "message navigation controls do not identify sidebar containers")
+    try check(TraeDesktopFocus.isTaskHeader(buttonNames: ["分享", "打开 Trae IDE"]), "task toolbar identifies the content title")
+    try check(!TraeDesktopFocus.isTaskHeader(buttonNames: ["分享"]), "message share controls do not identify the task title")
+    try check(!TraeDesktopFocus.isTaskHeader(buttonNames: ["项目详情"]), "Grok detail controls are not mistaken for a task title")
+    var consumption = FocusKeyConsumption()
+    try check(!consumption.consumeContinuation(.keyUp, code: 122), "unhandled F key release passes through")
+    consumption.begin(122)
+    try check(consumption.consumeContinuation(.keyDown, code: 122), "held handled F key does not repeat navigation or leak to the app")
+    try check(!consumption.consumeContinuation(.keyDown, code: 120), "other keys still pass through during an F key hold")
+    try check(consumption.consumeContinuation(.keyUp, code: 122), "handled F key release is consumed")
+    try check(!consumption.consumeContinuation(.keyDown, code: 122), "released F key can begin a new navigation")
+    for matches in [[false, false], [true, true]] {
+        do {
+            _ = try TraeDesktopFocus.uniqueTargetIndex(matches)
+            throw failure("SELF_TEST", "missing or ambiguous desktop target was accepted")
+        } catch let error as BridgeError {
+            try check(["FOCUS_TARGET_NOT_FOUND", "FOCUS_TARGET_AMBIGUOUS"].contains(error.code),
+                      "desktop navigation fails closed on missing or duplicate titles")
+        }
+    }
+
+// 5. 8-Model profile matrix validation
     for profile in NuphyDeviceProfile.supported {
         let resolved = NuphyDeviceProfile.resolve(productID: profile.wiredPID)
         try check(resolved?.transport == "USB" && resolved?.isDongle == false && resolved?.profile.model == profile.model, "\(profile.model) resolves to USB wired profile")
@@ -4493,53 +4741,72 @@ func selfTest() throws {
 }
 
 let arguments = Array(CommandLine.arguments.dropFirst())
+if arguments.first == "--focus-trae" {
+    guard arguments.count == 2 else { diagnostic("Use --focus-trae followed by an exact sidebar title."); Darwin.exit(64) }
+    do { emit(try TraeDesktopFocus.focus(title: arguments[1])); Darwin.exit(0) }
+    catch { diagnostic("\(error)"); Darwin.exit(1) }
+}
 if arguments.contains("--self-test") {
     do { try selfTest(); Darwin.exit(0) } catch { diagnostic("\(error)"); Darwin.exit(1) }
 }
 if arguments.contains("--help") || arguments.contains("-h") {
     print("""
-    dsh-daemon [--ws <ws://127.0.0.1:45678/peripheral/v1>] [--daemon] [--backup /absolute/path.json] [--self-test]
+    keyboard-daemon [--ws <ws://127.0.0.1:45679/peripheral/v1>] [--daemon] [--status-only | --focus-only] [--backup /absolute/path.json] [--self-test]
+    keyboard-daemon --focus-trae <exact-sidebar-title>
     Swift 6 Native Hardware Daemon & S4 HID Bridge for DeepSeek Harness (dsh-hid).
     - Without --ws/--daemon: runs in JSONL stdin/stdout bridge mode (compatible with Air75 Studio protocol).
     - With --daemon or --ws <url>: connects directly to DSH Peripheral JSON-RPC 2.0 WebSocket Server.
+    - With --status-only: displays status without global key monitoring or function-key remapping.
+    - With --focus-only: listens to occupied F1-F12 slots only, without approval keys or remapping.
+    - With --focus-trae: presses a unique accessible Trae sidebar title; does not open HID.
     """)
     Darwin.exit(0)
 }
 var backupPath = FileManager.default.homeDirectoryForCurrentUser
-    .appendingPathComponent("Library/Application Support/dsh-hid/lighting-backup.json").path
+    .appendingPathComponent("Library/Application Support/keyboard-trae/lighting-backup.json").path
 var wsUrlString: String? = nil
+var statusOnly = false
+var focusOnly = false
 var index = 0
 while index < arguments.count {
     let arg = arguments[index]
-    if arg == "--backup" {
-        guard index + 1 < arguments.count, arguments[index + 1].hasPrefix("/") else {
-            diagnostic("Use --backup followed by an absolute path."); Darwin.exit(64)
-        }
-        backupPath = arguments[index + 1]; index += 2
-    } else if arg == "--ws" {
-        guard index + 1 < arguments.count else {
-            diagnostic("Use --ws followed by a WebSocket URL."); Darwin.exit(64)
-        }
-        wsUrlString = arguments[index + 1]; index += 2
-    } else if arg.hasPrefix("--ws=") {
-        wsUrlString = String(arg.dropFirst("--ws=".count)); index += 1
-    } else if arg == "--daemon" {
-        if wsUrlString == nil { wsUrlString = "ws://127.0.0.1:45678/peripheral/v1" }
-        index += 1
-    } else {
-        diagnostic("Unknown argument: \(arg). Use --help for usage."); Darwin.exit(64)
+    if arg == "--backup", index + 1 < arguments.count {
+        backupPath = arguments[index + 1]
+        index += 2
+        continue
     }
+    if arg == "--status-only" {
+        statusOnly = true
+        index += 1
+        continue
+    }
+    if arg == "--focus-only" {
+        focusOnly = true
+        index += 1
+        continue
+    }
+    if arg == "--daemon" {
+        if wsUrlString == nil {
+            wsUrlString = "ws://127.0.0.1:45679/peripheral/v1"
+        }
+        index += 1
+        continue
+    }
+    if arg == "--ws", index + 1 < arguments.count {
+        wsUrlString = arguments[index + 1]
+        index += 2
+        continue
+    }
+    index += 1
 }
-// Ignore SIGPIPE so shutdown can still restore when the parent closes stdout.
-signal(SIGPIPE, SIG_IGN)
-signal(SIGINT, SIG_IGN); signal(SIGTERM, SIG_IGN); signal(SIGHUP, SIG_IGN)
+
 let server = JSONServer(device: Air75Device(backupURL: URL(fileURLWithPath: backupPath)))
 var wsDaemon: DshWebSocketDaemon? = nil
 if let wsUrlString = wsUrlString {
     guard let url = URL(string: wsUrlString), ["ws", "wss"].contains(url.scheme?.lowercased() ?? "") else {
         diagnostic("Invalid WebSocket URL: \(wsUrlString)"); Darwin.exit(64)
     }
-    let daemon = DshWebSocketDaemon(url: url, server: server)
+    let daemon = DshWebSocketDaemon(url: url, server: server, statusOnly: statusOnly, focusOnly: focusOnly)
     server.wsDaemon = daemon
     wsDaemon = daemon
     daemon.start()
