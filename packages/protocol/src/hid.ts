@@ -173,39 +173,99 @@ export function parseViaUplinkReport(report: Uint8Array): ViaUplinkEvent | null 
 export const NUPHY_VENDOR_ID = 0x19f5;
 export const NUPHY_BLUETOOTH_VENDOR_ID = 0x07d7; // 2007
 
+export const AIR75_V3_PRODUCT_ID = 0x1028;
 export const AIR75_V3_WIRED_PRODUCT_ID = 0x1028;
-export const AIR75_V3_DONGLE_PRODUCT_ID = 0x2620;
+export const KICK75_PRODUCT_ID = 0x1026;
+export const KICK75_ALT_PRODUCT_ID = 0x1027;
+export const NODE75_LP_PRODUCT_ID = 0x1030;
+export const NODE75_HP_PRODUCT_ID = 0x1031;
 export const AIR65_V3_PRODUCT_ID = 0x102b;
 export const AIR65_V3_WIRED_PRODUCT_ID = 0x102b;
-export const AIR65_V3_DONGLE_PRODUCT_ID = 0x2621;
-export const AIR96_V3_WIRED_PRODUCT_ID = 0x1029;
-export const AIR96_V3_DONGLE_PRODUCT_ID = 0x2622;
+export const AIR100_V3_PRODUCT_ID = 0x102d;
+export const NODE100_LP_PRODUCT_ID = 0x1037;
+export const NODE100_HP_PRODUCT_ID = 0x1036;
 
 export interface NuphyDeviceProfile {
   readonly model: string;
-  readonly wiredProductId: number;
-  readonly dongleProductId: number;
+  readonly modelId: string;
+  readonly productId: number;
   readonly reportLength: number;
+  readonly keyCount: number;
+  readonly sideCount: number;
 }
 
 export const SUPPORTED_NUPHY_PROFILES: readonly NuphyDeviceProfile[] = Object.freeze([
   {
     model: 'Air75 V3 ANSI',
-    wiredProductId: AIR75_V3_WIRED_PRODUCT_ID,
-    dongleProductId: AIR75_V3_DONGLE_PRODUCT_ID,
+    modelId: 'air75-v3',
+    productId: AIR75_V3_PRODUCT_ID,
     reportLength: 64,
+    keyCount: 84,
+    sideCount: 20,
+  },
+  {
+    model: 'Kick75 ANSI',
+    modelId: 'kick75',
+    productId: KICK75_PRODUCT_ID,
+    reportLength: 64,
+    keyCount: 80,
+    sideCount: 5,
+  },
+  {
+    model: 'Kick75 ANSI',
+    modelId: 'kick75',
+    productId: KICK75_ALT_PRODUCT_ID,
+    reportLength: 64,
+    keyCount: 80,
+    sideCount: 5,
+  },
+  {
+    model: 'NODE75 LP ANSI',
+    modelId: 'node75-lp',
+    productId: NODE75_LP_PRODUCT_ID,
+    reportLength: 64,
+    keyCount: 84,
+    sideCount: 5,
+  },
+  {
+    model: 'NODE75 HP ANSI',
+    modelId: 'node75-hp',
+    productId: NODE75_HP_PRODUCT_ID,
+    reportLength: 64,
+    keyCount: 82,
+    sideCount: 5,
   },
   {
     model: 'Air65 V3 ANSI',
-    wiredProductId: AIR65_V3_WIRED_PRODUCT_ID,
-    dongleProductId: AIR65_V3_DONGLE_PRODUCT_ID,
+    modelId: 'air65-v3',
+    productId: AIR65_V3_PRODUCT_ID,
     reportLength: 64,
+    keyCount: 68,
+    sideCount: 20,
   },
   {
-    model: 'Air96 V3 ANSI',
-    wiredProductId: AIR96_V3_WIRED_PRODUCT_ID,
-    dongleProductId: AIR96_V3_DONGLE_PRODUCT_ID,
+    model: 'Air100 V3 ANSI',
+    modelId: 'air100-v3',
+    productId: AIR100_V3_PRODUCT_ID,
     reportLength: 64,
+    keyCount: 99,
+    sideCount: 20,
+  },
+  {
+    model: 'NODE100 LP ANSI',
+    modelId: 'node100-lp',
+    productId: NODE100_LP_PRODUCT_ID,
+    reportLength: 64,
+    keyCount: 103,
+    sideCount: 5,
+  },
+  {
+    model: 'NODE100 HP ANSI',
+    modelId: 'node100-hp',
+    productId: NODE100_HP_PRODUCT_ID,
+    reportLength: 64,
+    keyCount: 109,
+    sideCount: 5,
   },
 ]);
 
@@ -214,14 +274,11 @@ export const SUPPORTED_NUPHY_PROFILES: readonly NuphyDeviceProfile[] = Object.fr
  */
 export function resolveNuphyProductProfile(productId: number): {
   profile: NuphyDeviceProfile;
-  transport: 'usb' | '2.4g';
+  transport: 'usb';
 } | null {
   for (const profile of SUPPORTED_NUPHY_PROFILES) {
-    if (profile.wiredProductId === productId) {
+    if (profile.productId === productId) {
       return { profile, transport: 'usb' };
-    }
-    if (profile.dongleProductId === productId) {
-      return { profile, transport: '2.4g' };
     }
   }
   return null;
