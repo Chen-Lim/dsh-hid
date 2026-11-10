@@ -1015,5 +1015,377 @@ describe('DSH Client Companion Plugin (client.ts)', () => {
 
     if (typeof cleanup === 'function') cleanup();
   });
+
+  it('renders session tab card, unbind button, and cascading session picker menu', () => {
+    const clientJsPath = join(__dirname, '../dist/client.js');
+    const content = readFileSync(clientJsPath, 'utf8');
+
+    let wsInstance: any = null;
+    class MockWebSocket {
+      public static OPEN = 1;
+      public onopen: any;
+      public onmessage: any;
+      public onclose: any;
+      public onerror: any;
+      public readyState = 1;
+      public send = vi.fn();
+      public close = vi.fn();
+      constructor() {
+        wsInstance = this;
+      }
+    }
+    (globalThis as any).WebSocket = MockWebSocket;
+
+    const fn = new Function('window', 'WebSocket', content);
+    fn((globalThis as any).window, MockWebSocket);
+
+    const renderedElements: Array<{ type: any; props: any; children: any[] }> = [];
+    const stateHooks: any[] = [];
+    let stateIdx = 0;
+
+    const mockReact = {
+      createElement: vi.fn((type: any, props: any, ...children: any[]) => {
+        const el = { type, props, children };
+        renderedElements.push(el);
+        return el;
+      }),
+      useState: vi.fn((init: any) => {
+        const currentIdx = stateIdx++;
+        if (stateHooks[currentIdx] === undefined) {
+          stateHooks[currentIdx] = init;
+        }
+        const setState = (newVal: any) => {
+          stateHooks[currentIdx] = typeof newVal === 'function' ? newVal(stateHooks[currentIdx]) : newVal;
+        };
+        return [stateHooks[currentIdx], setState];
+      }),
+      useEffect: vi.fn(),
+    };
+
+    const plugin = mockModuleLoader.load.mock.calls[0][0].factory((name: string) =>
+      name === 'react' ? mockReact : undefined
+    );
+
+    let panelComponent: (() => any) | null = null;
+    const cleanup = plugin.apply({
+      slots: {
+        inject: (_key: string, register: () => unknown) => {
+          register();
+          return () => {};
+        },
+        register: (meta: any, component: any) => {
+          if (meta.name === 'main' && meta.key === 'peripheral') panelComponent = component;
+          return () => {};
+        },
+      },
+      uiWorkspace: {
+        openSession: vi.fn(),
+        workspaces: {
+          list: {
+            getSnapshot: () => ({
+              items: [
+                {
+                  workspaceId: 'dsh-hid',
+                  title: 'dsh-hid',
+                  sessionIds: ['sess_proj_name', 'sess_blank_1', 'sess_hid_1'],
+                },
+              ],
+            }),
+          },
+        },
+        sessions: {
+          list: {
+            getSnapshot: () => ({
+              ids: ['sess_proj_name', 'sess_blank_1', 'sess_hid_1'],
+              byId: {
+                sess_proj_name: {
+                  id: 'sess_proj_name',
+                  title: 'dsh-hid', // Project title that must be excluded
+                },
+                sess_blank_1: {
+                  id: 'sess_blank_1',
+                  blank: true,
+                  title: 'Untitled Blank',
+                },
+                sess_hid_1: {
+                  id: 'sess_hid_1',
+                  title: '键盘可视化样式调整',
+                  displayTitle: '键盘可视化样式调整',
+                },
+              },
+            }),
+          },
+        },
+      },
+    });
+
+    // Send initial snapshot with F1 bound and F2 unbound
+    wsInstance.onmessage({
+      data: JSON.stringify({
+        jsonrpc: '2.0',
+        method: 'peripheral/snapshot',
+        params: {
+          focusedSlot: 1,
+          slots: Array.from({ length: 12 }, (_, i) => ({
+            slotIndex: i + 1,
+            sessionId: i === 0 ? 'sess-1' : null,
+            sessionTitle: i === 0 ? 'Session 1 Title' : undefined,
+            pinned: i === 0,
+            status: i === 0 ? 'IDLE' : 'INACTIVE',
+          })),
+        },
+      }),
+    });
+
+    // 1. Initial render
+    stateIdx = 0;
+    renderedElements.length = 0;
+    panelComponent!();
+
+    // Check F1 has session card
+    const cardF1 = renderedElements.find(
+      (el) => el.props?.['data-testid'] === 'session-card-1'
+    );
+    expect(cardF1).toBeDefined();
+
+    // Check unbind button on F1 and trigger unbind
+    const unbindBtnF1 = renderedElements.find(
+      (el) => el.props?.['data-testid'] === 'unbind-btn-1'
+    );
+    expect(unbindBtnF1).toBeDefined();
+    unbindBtnF1!.props.onClick({ stopPropagation: vi.fn() });
+
+    expect(wsInstance.send).toHaveBeenCalled();
+    const unbindCall = wsInstance.send.mock.calls.find((call: any[]) =>
+      call[0].includes('peripheral/unbindSlot')
+    );
+    expect(unbindCall).toBeDefined();
+    expect(JSON.parse(unbindCall[0]).params).toEqual({ slotIndex: 1 });
+
+    // 2. Open popover on F2 (placeholder)
+    const placeholderF2 = renderedElements.find(
+      (el) => el.props?.['data-testid'] === 'session-placeholder-2'
+    );
+    expect(placeholderF2).toBeDefined();
+    placeholderF2!.props.onClick({ stopPropagation: vi.fn() });
+
+    // Re-render after state change to show popover
+    stateIdx = 0;
+    renderedElements.length = 0;
+    panelComponent!();
+
+    const popover = renderedElements.find(
+      (el) => el.props?.['data-testid'] === 'peripheral-session-popover'
+    );
+    expect(popover).toBeDefined();
+
+    // Check project item exists (e.g. dsh-hid)
+    const dshHidProject = renderedElements.find(
+      (el) => el.props?.['data-testid'] === 'project-item-dsh-hid'
+    );
+    expect(dshHidProject).toBeDefined();
+
+    // Hover project to reveal submenu
+    dshHidProject!.props.onMouseEnter();
+
+    // Re-render to show submenu
+    stateIdx = 0;
+    renderedElements.length = 0;
+    panelComponent!();
+
+    const submenu = renderedElements.find(
+      (el) => el.props?.['data-testid'] === 'session-submenu-dsh-hid'
+    );
+    expect(submenu).toBeDefined();
+
+    // Verify project name session and blank sessions are excluded
+    const projNameItem = renderedElements.find(
+      (el) => el.props?.['data-testid'] === 'session-item-sess_proj_name'
+    );
+    expect(projNameItem).toBeUndefined();
+    const blankItem = renderedElements.find(
+      (el) => el.props?.['data-testid'] === 'session-item-sess_blank_1'
+    );
+    expect(blankItem).toBeUndefined();
+
+    // Click a valid session item
+    const sessionItem = renderedElements.find(
+      (el) => el.props?.['data-testid'] === 'session-item-sess_hid_1'
+    );
+    expect(sessionItem).toBeDefined();
+    sessionItem!.props.onClick();
+
+    const bindCall = wsInstance.send.mock.calls.find((call: any[]) =>
+      call[0].includes('peripheral/bindSlot')
+    );
+    expect(bindCall).toBeDefined();
+    const bindParams = JSON.parse(bindCall[0]).params;
+    expect(bindParams.slotIndex).toBe(2);
+    expect(bindParams.sessionId).toBe('sess_hid_1');
+    expect(bindParams.sessionTitle).toBe('键盘可视化样式调整');
+    expect(bindParams.pinned).toBe(true);
+
+    // 3. Open popover on bottom-half slot (e.g. F11) and verify it drops up (bottom: calc(100% + 4px))
+    const placeholderF11 = renderedElements.find(
+      (el) => el.props?.['data-testid'] === 'session-placeholder-11'
+    );
+    expect(placeholderF11).toBeDefined();
+    placeholderF11!.props.onClick({ stopPropagation: vi.fn() });
+
+    stateIdx = 0;
+    renderedElements.length = 0;
+    panelComponent!();
+
+    const popoverF11 = renderedElements.find(
+      (el) => el.props?.['data-testid'] === 'peripheral-session-popover'
+    );
+    expect(popoverF11).toBeDefined();
+    expect(popoverF11!.props.style.bottom).toBe('calc(100% + 4px)');
+    expect(popoverF11!.props.style.zIndex).toBe(9999);
+
+    if (typeof cleanup === 'function') cleanup();
+  });
+
+  it('shows empty notice when no projects exist and dynamically updates when peripheral/getProjects delivers data', () => {
+    const clientJsPath = join(__dirname, '../dist/client.js');
+    const content = readFileSync(clientJsPath, 'utf8');
+
+    let wsInstance: any;
+    class MockWebSocket {
+      public static OPEN = 1;
+      public send = vi.fn();
+      public close = vi.fn();
+      public readyState = 1;
+      public onopen: any = null;
+      public onmessage: any = null;
+      public onclose: any = null;
+      public onerror: any = null;
+      constructor() {
+        wsInstance = this;
+      }
+    }
+    (globalThis as any).WebSocket = MockWebSocket;
+
+    const fn = new Function('window', 'WebSocket', content);
+    fn((globalThis as any).window, MockWebSocket);
+
+    let panelComponent: any;
+    const renderedElements: any[] = [];
+    let stateIdx = 0;
+    const states: any[] = [];
+
+    const mockReact = {
+      createElement: (type: any, props: any, ...children: any[]) => {
+        const el = { type, props: props || {}, children };
+        renderedElements.push(el);
+        return el;
+      },
+      useState: (initial: any) => {
+        const idx = stateIdx++;
+        if (states[idx] === undefined) states[idx] = initial;
+        return [states[idx], (val: any) => (states[idx] = val)];
+      },
+      useEffect: (effect: any) => {
+        effect();
+      },
+    };
+
+    const pluginModule = mockModuleLoader.load.mock.calls[0][0].factory((name: string) =>
+      name === 'react' ? mockReact : undefined
+    );
+
+    // Provide empty uiWorkspace (no hardcoded fallback)
+    const cleanup = pluginModule.apply({
+      slots: {
+        inject: (_key: string, register: () => unknown) => {
+          register();
+          return () => {};
+        },
+        provideRoot: vi.fn(),
+        register: (meta: any, component: any) => {
+          if (meta.name === 'main' && meta.key === 'peripheral') panelComponent = component;
+          return () => {};
+        },
+      },
+      uiWorkspace: {
+        openSession: vi.fn(),
+      },
+    });
+
+    wsInstance.onopen();
+    // Verify client requested projects on connect
+    const getProjectsCall = wsInstance.send.mock.calls.find((call: any[]) =>
+      call[0].includes('peripheral/getProjects')
+    );
+    expect(getProjectsCall).toBeDefined();
+
+    // Send initial snapshot with 12 slots
+    wsInstance.onmessage({
+      data: JSON.stringify({
+        jsonrpc: '2.0',
+        method: 'peripheral/snapshot',
+        params: {
+          focusedSlot: 1,
+          slots: Array.from({ length: 12 }, (_, i) => ({
+            slotIndex: i + 1,
+            sessionId: null,
+            status: 'INACTIVE',
+          })),
+        },
+      }),
+    });
+
+    // 1. Click slot 2 placeholder when empty
+    stateIdx = 0;
+    renderedElements.length = 0;
+    panelComponent!();
+
+    const placeholder = renderedElements.find(
+      (el) => el.props?.['data-testid'] === 'session-placeholder-2'
+    );
+    expect(placeholder).toBeDefined();
+    placeholder!.props.onClick({ stopPropagation: vi.fn() });
+
+    stateIdx = 0;
+    renderedElements.length = 0;
+    panelComponent!();
+
+    // Verify empty notice rendered
+    const emptyNotice = renderedElements.find(
+      (el) => el.props?.['data-testid'] === 'no-projects-notice'
+    );
+    expect(emptyNotice).toBeDefined();
+
+    // 2. Deliver dynamic projects via RPC response
+    wsInstance.onmessage({
+      data: JSON.stringify({
+        jsonrpc: '2.0',
+        id: 1,
+        result: {
+          projects: [
+            {
+              id: 'real-project-alpha',
+              name: 'Real Project Alpha',
+              sessions: [
+                { id: 'alpha-session-1', title: '动态会话一' },
+              ],
+            },
+          ],
+        },
+      }),
+    });
+
+    stateIdx = 0;
+    renderedElements.length = 0;
+    panelComponent!();
+
+    // Verify real dynamic project is now rendered
+    const realProject = renderedElements.find(
+      (el) => el.props?.['data-testid'] === 'project-item-real-project-alpha'
+    );
+    expect(realProject).toBeDefined();
+
+    if (typeof cleanup === 'function') cleanup();
+  });
 });
 

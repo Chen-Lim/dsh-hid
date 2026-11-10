@@ -7,6 +7,8 @@ import {
   METHOD_SET_BRAINPOWER,
   METHOD_SELECT_OPTION,
   METHOD_ABORT,
+  METHOD_BIND_SLOT,
+  METHOD_UNBIND_SLOT,
   NOTIFICATION_TRANSPORT_CHANGED,
   RPC_METHOD_NOT_FOUND,
   RPC_INVALID_PARAMS,
@@ -48,6 +50,17 @@ export interface PeripheralRpcHandler {
     action: OptionAction
   ): Promise<{ success: boolean; slotIndex: number }>;
   onAbort?(slotIndex: number): Promise<{ success: boolean; slotIndex: number }>;
+  onBindSlot?(
+    slotIndex: number,
+    sessionId: string,
+    sessionTitle?: string,
+    pinned?: boolean
+  ): Promise<{ success: boolean; slot: SlotInfo }>;
+  onUnbindSlot?(slotIndex: number): Promise<{ success: boolean; slotIndex: number }>;
+  onGetProjects?(): Promise<{
+    success: boolean;
+    projects: Array<{ id: string; name: string; sessions: Array<{ id: string; title: string }> }>;
+  }>;
   onSessionOpened?(sessionId: string): Promise<{ success: boolean; slotIndex?: number }>;
   onTransportChanged?(params: TransportChangedParams): void | Promise<void>;
   getInitialSnapshot?(): SnapshotParams;
@@ -397,6 +410,65 @@ export class PeripheralWsServer {
           }
           const result = await this.handler.onAbort(slotIndex);
           this.sendToClient(client, createJsonRpcSuccessResponse(id, result));
+          break;
+        }
+
+        case METHOD_BIND_SLOT: {
+          if (!this.handler?.onBindSlot) {
+            this.sendToClient(
+              client,
+              createJsonRpcErrorResponse(id, RPC_METHOD_NOT_FOUND, `Method ${method} not implemented`)
+            );
+            return;
+          }
+          const slotIndex = p.slotIndex;
+          const sessionId = p.sessionId as string;
+          const sessionTitle = p.sessionTitle as string | undefined;
+          const pinned = p.pinned !== false;
+          if (!isValidSlotIndex(slotIndex) || !sessionId) {
+            this.sendToClient(
+              client,
+              createJsonRpcErrorResponse(
+                id,
+                RPC_INVALID_PARAMS,
+                'slotIndex (1-12) and sessionId are required for peripheral/bindSlot'
+              )
+            );
+            return;
+          }
+          const result = await this.handler.onBindSlot(slotIndex, sessionId, sessionTitle, pinned);
+          this.sendToClient(client, createJsonRpcSuccessResponse(id, result));
+          break;
+        }
+
+        case METHOD_UNBIND_SLOT: {
+          if (!this.handler?.onUnbindSlot) {
+            this.sendToClient(
+              client,
+              createJsonRpcErrorResponse(id, RPC_METHOD_NOT_FOUND, `Method ${method} not implemented`)
+            );
+            return;
+          }
+          const slotIndex = p.slotIndex;
+          if (!isValidSlotIndex(slotIndex)) {
+            this.sendToClient(
+              client,
+              createJsonRpcErrorResponse(id, RPC_INVALID_PARAMS, 'slotIndex must be between 1 and 12')
+            );
+            return;
+          }
+          const result = await this.handler.onUnbindSlot(slotIndex);
+          this.sendToClient(client, createJsonRpcSuccessResponse(id, result));
+          break;
+        }
+
+        case 'peripheral/getProjects': {
+          if (this.handler?.onGetProjects) {
+            const result = await this.handler.onGetProjects();
+            this.sendToClient(client, createJsonRpcSuccessResponse(id, result));
+          } else {
+            this.sendToClient(client, createJsonRpcSuccessResponse(id, { success: true, projects: [] }));
+          }
           break;
         }
 

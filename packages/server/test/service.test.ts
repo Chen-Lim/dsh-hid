@@ -135,6 +135,66 @@ describe('PeripheralServerService (Cordis integration)', () => {
     expect(events).toEqual([btState]);
   });
 
+  it('binds and unbinds slot via handler and broadcasts updates', async () => {
+    const handler = (service.wsServer as any).handler;
+    const broadcastSpy = vi.spyOn(service.wsServer, 'broadcastSlotUpdated');
+
+    const bindResult = await handler.onBindSlot(4, 'pinned-sess-1', 'Fixing login bug', true);
+    expect(bindResult.success).toBe(true);
+    expect(bindResult.slot.slotIndex).toBe(4);
+    expect(bindResult.slot.sessionId).toBe('pinned-sess-1');
+    expect(bindResult.slot.sessionTitle).toBe('Fixing login bug');
+    expect(bindResult.slot.pinned).toBe(true);
+    expect(broadcastSpy).toHaveBeenCalled();
+
+    const unbindResult = await handler.onUnbindSlot(4);
+    expect(unbindResult.success).toBe(true);
+    expect(service.router.getSlot(4)?.sessionId).toBeNull();
+    expect(service.router.getSlot(4)?.pinned).toBe(false);
+  });
+
+  it('discovers projects and sessions dynamically via getAvailableProjects', async () => {
+    // 1. Mock context workspace and sessions services
+    ctx.get = (name: string) => {
+      if (name === 'workspaces') {
+        return {
+          list: {
+            getSnapshot: () => ({
+              items: [
+                {
+                  workspaceId: 'ws-demo',
+                  title: 'Demo Project',
+                  sessionIds: ['demo-sess-proj', 'demo-sess-1', 'demo-sess-2'],
+                },
+              ],
+            }),
+          },
+        };
+      }
+      if (name === 'sessions') {
+        return {
+          list: () => [
+            { id: 'demo-sess-proj', title: 'Demo Project' }, // should be excluded
+            { id: 'demo-sess-1', title: 'Task 1' },
+            { id: 'demo-sess-2', title: 'Task 2' },
+          ],
+        };
+      }
+      return undefined;
+    };
+
+    const projects = service.getAvailableProjects();
+    expect(projects).toHaveLength(1);
+    expect(projects[0].name).toBe('Demo Project');
+    expect(projects[0].sessions).toHaveLength(2);
+    expect(projects[0].sessions[0].title).toBe('Task 1');
+
+    const handler = (service.wsServer as any).handler;
+    const rpcRes = await handler.onGetProjects();
+    expect(rpcRes.success).toBe(true);
+    expect(rpcRes.projects).toEqual(projects);
+  });
+
   it('stops server cleanly when context is disposed', async () => {
     const stopSpy = vi.spyOn(service, 'stop');
     await ctx.emit('dispose');

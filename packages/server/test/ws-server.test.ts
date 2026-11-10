@@ -6,6 +6,8 @@ import {
   METHOD_SET_BRAINPOWER,
   METHOD_SELECT_OPTION,
   METHOD_ABORT,
+  METHOD_BIND_SLOT,
+  METHOD_UNBIND_SLOT,
   NOTIFICATION_SNAPSHOT,
   NOTIFICATION_SLOT_UPDATED,
   NOTIFICATION_FOCUS_CHANGED,
@@ -114,6 +116,20 @@ describe('PeripheralWsServer', () => {
       slotIndex,
     })),
     onAbort: vi.fn(async (slotIndex) => ({
+      success: true,
+      slotIndex,
+    })),
+    onBindSlot: vi.fn(async (slotIndex, sessionId, sessionTitle, pinned) => ({
+      success: true,
+      slot: {
+        slotIndex,
+        sessionId,
+        sessionTitle,
+        pinned,
+        status: AgentPeripheralStatus.IDLE,
+      },
+    })),
+    onUnbindSlot: vi.fn(async (slotIndex) => ({
       success: true,
       slotIndex,
     })),
@@ -298,5 +314,65 @@ describe('PeripheralWsServer', () => {
     expect(isJsonRpcNotification(notif)).toBe(true);
     expect(notif.method).toBe(NOTIFICATION_TRANSPORT_CHANGED);
     expect(notif.params).toEqual(transportPayload);
+  });
+
+  it('handles peripheral/bindSlot and peripheral/unbindSlot requests', async () => {
+    client = await createConnectedClient();
+    await client.nextMessage(); // snapshot
+
+    // bindSlot request
+    client.send(
+      createJsonRpcRequest('req-bind', METHOD_BIND_SLOT, {
+        slotIndex: 3,
+        sessionId: 'sess-custom',
+        sessionTitle: 'Custom Session',
+        pinned: true,
+      })
+    );
+
+    const bindResp = await client.nextMessage();
+    expect(isJsonRpcSuccessResponse(bindResp)).toBe(true);
+    expect(bindResp.id).toBe('req-bind');
+    expect(bindResp.result.success).toBe(true);
+    expect(bindResp.result.slot.sessionId).toBe('sess-custom');
+    expect(bindResp.result.slot.pinned).toBe(true);
+    expect(handler.onBindSlot).toHaveBeenCalledWith(3, 'sess-custom', 'Custom Session', true);
+
+    // unbindSlot request
+    client.send(
+      createJsonRpcRequest('req-unbind', METHOD_UNBIND_SLOT, {
+        slotIndex: 3,
+      })
+    );
+
+    const unbindResp = await client.nextMessage();
+    expect(isJsonRpcSuccessResponse(unbindResp)).toBe(true);
+    expect(unbindResp.id).toBe('req-unbind');
+    expect(unbindResp.result.success).toBe(true);
+    expect(handler.onUnbindSlot).toHaveBeenCalledWith(3);
+  });
+
+  it('handles peripheral/getProjects request', async () => {
+    (handler as any).onGetProjects = vi.fn().mockResolvedValue({
+      success: true,
+      projects: [
+        {
+          id: 'test-p1',
+          name: 'Test Project',
+          sessions: [{ id: 's1', title: 'Session 1' }],
+        },
+      ],
+    });
+
+    client = await createConnectedClient();
+    await client.nextMessage(); // snapshot
+
+    client.send(createJsonRpcRequest('req-proj', 'peripheral/getProjects', {}));
+    const resp = await client.nextMessage();
+    expect(isJsonRpcSuccessResponse(resp)).toBe(true);
+    expect(resp.id).toBe('req-proj');
+    expect(resp.result.projects).toHaveLength(1);
+    expect(resp.result.projects[0].name).toBe('Test Project');
+    expect((handler as any).onGetProjects).toHaveBeenCalled();
   });
 });

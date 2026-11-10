@@ -10,8 +10,11 @@ export const PROTOCOL_VERSION = '0.1.0-alpha';
 export const DEFAULT_HOST = '127.0.0.1';
 export const DEFAULT_DSH_PORT = 45678;
 export const DEFAULT_TRAE_PORT = 45679;
-export const DEFAULT_PORT = (typeof process !== 'undefined' && process.env?.PERIPHERAL_PORT)
-  ? parseInt(process.env.PERIPHERAL_PORT, 10)
+const envPort = typeof globalThis !== 'undefined'
+  ? (globalThis as Record<string, any>).process?.env?.PERIPHERAL_PORT
+  : undefined;
+export const DEFAULT_PORT = envPort
+  ? parseInt(envPort, 10)
   : DEFAULT_TRAE_PORT;
 export const DEFAULT_PATH = '/peripheral/v1';
 export const DEFAULT_WS_URL = `ws://${DEFAULT_HOST}:${DEFAULT_PORT}${DEFAULT_PATH}`;
@@ -39,6 +42,9 @@ export const METHOD_SWITCH_FOCUS = 'peripheral/switchFocus';
 export const METHOD_SET_BRAINPOWER = 'peripheral/setBrainpower';
 export const METHOD_SELECT_OPTION = 'peripheral/selectOption';
 export const METHOD_ABORT = 'peripheral/abort';
+export const METHOD_BIND_SLOT = 'peripheral/bindSlot';
+export const METHOD_UNBIND_SLOT = 'peripheral/unbindSlot';
+export const METHOD_GET_PROJECTS = 'peripheral/getProjects';
 
 /**
  * JSON-RPC 2.0 Standard Error Codes.

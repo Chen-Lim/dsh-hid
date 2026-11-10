@@ -12,6 +12,8 @@ import type {
   METHOD_SET_BRAINPOWER,
   METHOD_SELECT_OPTION,
   METHOD_ABORT,
+  METHOD_BIND_SLOT,
+  METHOD_UNBIND_SLOT,
 } from './constants.js';
 
 /**
@@ -65,6 +67,10 @@ export interface SlotInfo {
   activeTool?: string;
   /** Pending user question or confirmation */
   question?: SlotQuestion;
+  /** Whether the slot is pinned by the user (exempt from automatic LRU eviction) */
+  pinned?: boolean;
+  /** Human-readable title of the session */
+  sessionTitle?: string;
 }
 
 /* ========================================================================== */
@@ -235,6 +241,27 @@ export interface AbortResult {
   success: boolean;
 }
 
+export interface BindSlotParams {
+  slotIndex: number;
+  sessionId: string;
+  sessionTitle?: string;
+  pinned?: boolean;
+}
+
+export interface BindSlotResult {
+  success: boolean;
+  slot: SlotInfo;
+}
+
+export interface UnbindSlotParams {
+  slotIndex: number;
+}
+
+export interface UnbindSlotResult {
+  success: boolean;
+  slotIndex: number;
+}
+
 export type SwitchFocusRequest = JsonRpcRequest<
   typeof METHOD_SWITCH_FOCUS,
   SwitchFocusParams
@@ -253,6 +280,16 @@ export type SelectOptionRequest = JsonRpcRequest<
 export type AbortRequest = JsonRpcRequest<
   typeof METHOD_ABORT,
   AbortParams
+>;
+
+export type BindSlotRequest = JsonRpcRequest<
+  typeof METHOD_BIND_SLOT,
+  BindSlotParams
+>;
+
+export type UnbindSlotRequest = JsonRpcRequest<
+  typeof METHOD_UNBIND_SLOT,
+  UnbindSlotParams
 >;
 
 export type ClientRequest =

@@ -32,6 +32,8 @@ interface UiSlot {
   brainpower?: string;
   activeTool?: string;
   question?: { prompt: string; options: string[] };
+  pinned?: boolean;
+  sessionTitle?: string;
 }
 
 interface UiTransportState {
@@ -54,6 +56,7 @@ interface UiState {
   lastError: string | null;
   transportState?: UiTransportState | null;
   darkMode?: boolean;
+  projects?: Array<{ id: string; name: string; sessions: Array<{ id: string; title: string }> }>;
 }
 
 interface KeyboardKeyDef {
@@ -116,6 +119,10 @@ const EN_DICT = {
   quickActions: 'Actions',
   activeSlot: 'Active Slot',
   noSession: 'No Session',
+  unbind: 'Unbind',
+  unbindSlot: 'Unbind Slot',
+  clickToBindSession: 'Click to assign session',
+  boundToSlot: 'Bound to',
 };
 
 const ZH_DICT = {
@@ -151,6 +158,10 @@ const ZH_DICT = {
   quickActions: '操作',
   activeSlot: '当前槽位',
   noSession: '无会话',
+  unbind: '解绑',
+  unbindSlot: '解除当前绑定',
+  clickToBindSession: '点击分配会话',
+  boundToSlot: '已绑定至',
 };
 
 /**
@@ -359,14 +370,14 @@ const AIR75_CSS = `
   }
   .peripheral-slot-grid {
     display: grid;
-    grid-template-columns: 52px minmax(96px, 140px) minmax(96px, 130px) minmax(120px, 1fr) minmax(110px, 160px);
+    grid-template-columns: 52px minmax(110px, 160px) minmax(96px, 120px) minmax(120px, 1fr) minmax(110px, 160px);
     align-items: center;
     gap: 12px;
     min-width: 0;
   }
   @media (max-width: 720px) {
     .peripheral-slot-grid {
-      grid-template-columns: 46px minmax(80px, 110px) minmax(88px, 112px) minmax(80px, 1fr) auto;
+      grid-template-columns: 46px minmax(90px, 130px) minmax(88px, 112px) minmax(80px, 1fr) auto;
       gap: 8px;
     }
   }
@@ -953,6 +964,391 @@ if (win?.__ModuleLoader__) {
             }
           }
 
+          function sendBindSlot(
+            slotIndex: number,
+            sessionId: string,
+            sessionTitle?: string,
+            pinned = true
+          ): void {
+            const snapshot = store.get();
+            const updatedSlots = snapshot.slots.map((s) => {
+              if (s.sessionId === sessionId && s.slotIndex !== slotIndex) {
+                return {
+                  ...s,
+                  sessionId: null,
+                  sessionTitle: undefined,
+                  pinned: false,
+                  status: 'INACTIVE',
+                };
+              }
+              if (s.slotIndex === slotIndex) {
+                return {
+                  ...s,
+                  sessionId,
+                  sessionTitle: sessionTitle ?? s.sessionTitle,
+                  pinned,
+                  status: s.status === 'INACTIVE' ? 'IDLE' : s.status,
+                };
+              }
+              return s;
+            });
+            store.patch({ slots: updatedSlots });
+
+            if (ws && ws.readyState === WebSocket.OPEN) {
+              try {
+                ws.send(
+                  JSON.stringify({
+                    jsonrpc: '2.0',
+                    id: Date.now(),
+                    method: 'peripheral/bindSlot',
+                    params: { slotIndex, sessionId, sessionTitle, pinned },
+                  })
+                );
+              } catch {
+                // ignore
+              }
+            }
+          }
+
+          function sendUnbindSlot(slotIndex: number): void {
+            const snapshot = store.get();
+            const updatedSlots = snapshot.slots.map((s) => {
+              if (s.slotIndex === slotIndex) {
+                return {
+                  ...s,
+                  sessionId: null,
+                  sessionTitle: undefined,
+                  pinned: false,
+                  status: 'INACTIVE',
+                  activeTool: undefined,
+                  question: undefined,
+                };
+              }
+              return s;
+            });
+            store.patch({ slots: updatedSlots });
+
+            if (ws && ws.readyState === WebSocket.OPEN) {
+              try {
+                ws.send(
+                  JSON.stringify({
+                    jsonrpc: '2.0',
+                    id: Date.now(),
+                    method: 'peripheral/unbindSlot',
+                    params: { slotIndex },
+                  })
+                );
+              } catch {
+                // ignore
+              }
+            }
+          }
+
+          interface ProjectSession {
+            id: string;
+            title: string;
+          }
+          interface ProjectItem {
+            id: string;
+            name: string;
+            sessions: ProjectSession[];
+          }
+
+          function sanitizeProjects(projects: ProjectItem[]): ProjectItem[] {
+            return projects.map((p) => {
+              const pName = p.name ? p.name.trim().toLowerCase() : '';
+              const pId = p.id ? p.id.trim().toLowerCase() : '';
+              const cleanedSessions = (p.sessions || []).filter((s) => {
+                if (!s || !s.title) return false;
+                const sTitle = s.title.trim().toLowerCase();
+                const sId = s.id ? s.id.trim().toLowerCase() : '';
+                // 排除与项目名称或项目 ID 相同的 session
+                if (sTitle === pName || sTitle === pId) return false;
+                if (sId === pName || sId === pId) return false;
+                return true;
+              });
+              return {
+                ...p,
+                sessions: cleanedSessions,
+              };
+            });
+          }
+
+          function extractProjectsFromUiWorkspace(ui: any): ProjectItem[] {
+            if (!ui) return [];
+            try {
+              // 1. Resolve workspaces array
+              let wsItems: any[] = [];
+              const wsStore = ui.workspaces?.list ?? ui.workspaces;
+              const wsSnapshot =
+                typeof wsStore?.getSnapshot === 'function' ? wsStore.getSnapshot() : wsStore;
+              if (Array.isArray(wsSnapshot)) {
+                wsItems = wsSnapshot;
+              } else if (Array.isArray(wsSnapshot?.items)) {
+                wsItems = wsSnapshot.items;
+              } else if (typeof ui.getWorkspaces === 'function') {
+                const res = ui.getWorkspaces();
+                if (Array.isArray(res)) wsItems = res;
+              }
+
+              // 2. Resolve sessions dictionary
+              const sessStore = ui.sessions?.list ?? ui.sessions;
+              const sessSnapshot =
+                typeof sessStore?.getSnapshot === 'function' ? sessStore.getSnapshot() : sessStore;
+              const byId = sessSnapshot?.byId || {};
+
+              if (wsItems.length > 0) {
+                const projects: ProjectItem[] = [];
+                for (const w of wsItems) {
+                  const id = String(w.workspaceId || w.id || w.path || w.title || w.name);
+                  const name = String(w.title || w.name || w.path || id);
+                  const sessionIds: string[] = Array.isArray(w.sessionIds)
+                    ? w.sessionIds
+                    : Array.isArray(w.sessions)
+                    ? w.sessions.map((s: any) => (typeof s === 'string' ? s : (s.id || s.sessionId)))
+                    : [];
+
+                  const sessions: ProjectSession[] = [];
+                  for (const sid of sessionIds) {
+                    if (!sid) continue;
+                    const sObj =
+                      byId[sid] ||
+                      (Array.isArray(w.sessions)
+                        ? w.sessions.find((s: any) => (s?.id || s?.sessionId) === sid)
+                        : undefined);
+                    // 排除 blank 会话与子智能体会话
+                    if (sObj?.blank === true || sObj?.sessionListMetadata?.blank === true) continue;
+                    if (sObj?.origin === 'subagent') continue;
+
+                    const title = sObj?.displayTitle || sObj?.title || sObj?.name || sid;
+                    const trimmedTitle = String(title).trim().toLowerCase();
+                    const trimmedName = name.trim().toLowerCase();
+                    const trimmedId = id.trim().toLowerCase();
+                    const trimmedSid = String(sid).trim().toLowerCase();
+
+                    // 排除项目名称本身作为会话
+                    if (
+                      trimmedTitle === trimmedName ||
+                      trimmedTitle === trimmedId ||
+                      trimmedSid === trimmedName ||
+                      trimmedSid === trimmedId
+                    ) {
+                      continue;
+                    }
+
+                    sessions.push({
+                      id: String(sid),
+                      title: String(title),
+                    });
+                  }
+                  projects.push({ id, name, sessions });
+                }
+                return sanitizeProjects(projects.filter((p) => p.sessions.length > 0 || p.name));
+              }
+            } catch {
+              // ignore
+            }
+            return [];
+          }
+
+          function extractProjectsFromControllers(wsSvc: any, sessSvc: any): ProjectItem[] {
+            if (!wsSvc && !sessSvc) return [];
+            try {
+              const wsSnapshot =
+                typeof wsSvc?.list?.getSnapshot === 'function'
+                  ? wsSvc.list.getSnapshot()
+                  : typeof wsSvc?.getSnapshot === 'function'
+                  ? wsSvc.getSnapshot()
+                  : wsSvc;
+              const sessSnapshot =
+                typeof sessSvc?.list?.getSnapshot === 'function'
+                  ? sessSvc.list.getSnapshot()
+                  : typeof sessSvc?.getSnapshot === 'function'
+                  ? sessSvc.getSnapshot()
+                  : sessSvc;
+
+              const wsItems = wsSnapshot?.items || (Array.isArray(wsSnapshot) ? wsSnapshot : []);
+              const byId = sessSnapshot?.byId || {};
+
+              if (Array.isArray(wsItems) && wsItems.length > 0) {
+                const projects: ProjectItem[] = wsItems.map((w: any) => {
+                  const id = String(w.workspaceId || w.id || w.path || w.title || w.name);
+                  const name = String(w.title || w.name || w.path || id);
+                  const sessionIds: string[] = Array.isArray(w.sessionIds) ? w.sessionIds : [];
+                  const sessions: ProjectSession[] = [];
+                  for (const sid of sessionIds) {
+                    const sObj = byId[sid];
+                    if (sObj?.blank === true || sObj?.sessionListMetadata?.blank === true) continue;
+                    if (sObj?.origin === 'subagent') continue;
+                    const title = String(sObj?.displayTitle || sObj?.title || sid);
+                    const trimmedTitle = title.trim().toLowerCase();
+                    const trimmedName = name.trim().toLowerCase();
+                    const trimmedId = id.trim().toLowerCase();
+                    const trimmedSid = String(sid).trim().toLowerCase();
+                    if (
+                      trimmedTitle === trimmedName ||
+                      trimmedTitle === trimmedId ||
+                      trimmedSid === trimmedName ||
+                      trimmedSid === trimmedId
+                    ) {
+                      continue;
+                    }
+                    sessions.push({ id: String(sid), title });
+                  }
+                  return { id, name, sessions };
+                });
+                return sanitizeProjects(projects);
+              }
+            } catch {
+              // ignore
+            }
+            return [];
+          }
+
+          function extractProjectsFromDOM(): ProjectItem[] {
+            if (typeof document === 'undefined') return [];
+            try {
+              const projects: ProjectItem[] = [];
+              const wsElements = Array.from(document.querySelectorAll('[data-row-key^="workspace:"]'));
+              if (wsElements.length > 0) {
+                for (const wsEl of wsElements) {
+                  const rawKey = wsEl.getAttribute('data-row-key') || '';
+                  const wsId = rawKey.replace(/^workspace:/, '');
+                  const labelEl =
+                    wsEl.querySelector('[class*="sectionLabel"], [class*="title"], [class*="Label"]') || wsEl;
+                  const name = labelEl.textContent?.trim() || wsId;
+
+                  const container =
+                    wsEl.closest('[class*="groupSection"]') ||
+                    wsEl.parentElement?.parentElement ||
+                    wsEl.parentElement;
+                  const sessionEls = container
+                    ? Array.from(container.querySelectorAll('[data-row-key^="session:"]'))
+                    : [];
+
+                  const sessions: ProjectSession[] = [];
+                  for (const sessEl of sessionEls) {
+                    const sid = (sessEl.getAttribute('data-row-key') || '').replace(/^session:/, '');
+                    if (!sid) continue;
+
+                    const titleEl = sessEl.querySelector('[class*="title"]');
+                    let title = titleEl?.textContent?.trim();
+                    if (!title) {
+                      const clone = sessEl.cloneNode(true) as HTMLElement;
+                      clone
+                        .querySelectorAll(
+                          '[class*="time"], [class*="timestamp"], [class*="Actions"], button, [class*="indicator"]'
+                        )
+                        .forEach((n) => n.remove());
+                      title = clone.textContent?.trim() || sid;
+                    }
+
+                    const trimmedTitle = title.trim().toLowerCase();
+                    const trimmedName = name.trim().toLowerCase();
+                    const trimmedId = wsId.trim().toLowerCase();
+                    const trimmedSid = sid.trim().toLowerCase();
+
+                    // 排除项目名称本身作为会话
+                    if (
+                      trimmedTitle === trimmedName ||
+                      trimmedTitle === trimmedId ||
+                      trimmedSid === trimmedName ||
+                      trimmedSid === trimmedId
+                    ) {
+                      continue;
+                    }
+
+                    sessions.push({ id: sid, title });
+                  }
+
+                  projects.push({
+                    id: wsId || name,
+                    name: name || wsId,
+                    sessions,
+                  });
+                }
+                if (projects.length > 0 && projects.some((p) => p.sessions.length > 0)) {
+                  return sanitizeProjects(projects);
+                }
+              }
+
+              const allSessionEls = Array.from(document.querySelectorAll('[data-row-key^="session:"]'));
+              if (allSessionEls.length > 0) {
+                const sessions: ProjectSession[] = [];
+                for (const sessEl of allSessionEls) {
+                  const sid = (sessEl.getAttribute('data-row-key') || '').replace(/^session:/, '');
+                  if (!sid) continue;
+                  const titleEl = sessEl.querySelector('[class*="title"]');
+                  const title = titleEl?.textContent?.trim() || sid;
+                  sessions.push({ id: sid, title });
+                }
+                return sanitizeProjects([
+                  {
+                    id: 'default-workspace',
+                    name: '工作区',
+                    sessions,
+                  },
+                ]);
+              }
+            } catch {
+              // ignore
+            }
+            return [];
+          }
+
+          function requestProjects(): void {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+              try {
+                ws.send(
+                  JSON.stringify({
+                    jsonrpc: '2.0',
+                    id: Date.now(),
+                    method: 'peripheral/getProjects',
+                    params: {},
+                  })
+                );
+              } catch {
+                // ignore
+              }
+            }
+          }
+
+          function getAvailableProjects(): ProjectItem[] {
+            // 1. Try uiWorkspace service
+            const uiWorkspace =
+              typeof ctx.get === 'function' ? ctx.get('uiWorkspace') : ctx?.uiWorkspace;
+            const fromUi = extractProjectsFromUiWorkspace(uiWorkspace);
+            if (fromUi.length > 0) {
+              return sanitizeProjects(fromUi);
+            }
+
+            // 2. Try raw workspaces / sessions services
+            const wsSvc = typeof ctx.get === 'function' ? ctx.get('workspaces') : ctx?.workspaces;
+            const sessSvc = typeof ctx.get === 'function' ? ctx.get('sessions') : ctx?.sessions;
+            const fromCtx = extractProjectsFromControllers(wsSvc, sessSvc);
+            if (fromCtx.length > 0) {
+              return sanitizeProjects(fromCtx);
+            }
+
+            // 3. Try DOM tree extraction from live sidebar
+            const fromDom = extractProjectsFromDOM();
+            if (fromDom.length > 0) {
+              return sanitizeProjects(fromDom);
+            }
+
+            // 4. Try projects cached from WebSocket RPC
+            const cached = store.get().projects;
+            if (Array.isArray(cached) && cached.length > 0) {
+              return sanitizeProjects(cached);
+            }
+
+            // Request update from backend if not yet cached
+            requestProjects();
+
+            // No dummy hardcoded data: return empty list if none discovered
+            return [];
+          }
+
           function getRemoteService(): any {
             try {
               return typeof ctx.get === 'function' ? ctx.get('remote') : (ctx as any)?.remote;
@@ -1036,6 +1432,10 @@ if (win?.__ModuleLoader__) {
             } catch {
               return;
             }
+            if (data?.result && Array.isArray(data.result.projects)) {
+              store.patch({ projects: data.result.projects });
+              return;
+            }
             const params = data?.params ?? {};
             switch (data?.method) {
               case 'peripheral/snapshot':
@@ -1093,7 +1493,10 @@ if (win?.__ModuleLoader__) {
             if (lifecycle.disposed) return;
             try {
               ws = new WebSocket(WS_URL);
-              ws.onopen = () => store.patch({ connected: true, lastError: null });
+              ws.onopen = () => {
+                store.patch({ connected: true, lastError: null });
+                requestProjects();
+              };
               ws.onmessage = (event: MessageEvent) => handleMessage(String(event.data));
               ws.onclose = () => {
                 ws = null;
@@ -1265,6 +1668,255 @@ if (win?.__ModuleLoader__) {
             );
           }
 
+          function renderSessionPickerPopover(
+            slot: UiSlot,
+            current: UiState,
+            hoveredProject: string | null,
+            setHoveredProject: (p: string | null) => void,
+            closePopover: () => void
+          ) {
+            const projects = getAvailableProjects();
+            const isBottomHalf = slot.slotIndex >= 7;
+
+            return h(
+              'div',
+              {
+                className: 'peripheral-session-popover',
+                'data-testid': 'peripheral-session-popover',
+                style: {
+                  position: 'absolute',
+                  ...(isBottomHalf
+                    ? { bottom: 'calc(100% + 4px)' }
+                    : { top: 'calc(100% + 4px)' }),
+                  left: 0,
+                  zIndex: 9999,
+                  minWidth: '170px',
+                  background: 'var(--dsw-alias-bg-layer-1, #ffffff)',
+                  border: '1px solid var(--dsw-alias-border-l1)',
+                  borderRadius: '8px',
+                  boxShadow: '0 8px 24px rgba(0, 0, 0, 0.2)',
+                  padding: '4px 0',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  fontSize: '12px',
+                  userSelect: 'none',
+                },
+                onClick: (e: any) => e.stopPropagation(),
+              },
+              slot.sessionId
+                ? h(
+                    'div',
+                    {
+                      role: 'button',
+                      'data-testid': 'peripheral-popover-unbind-action',
+                      style: {
+                        padding: '6px 12px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        color: 'var(--dsw-alias-state-error-primary, #ef4444)',
+                        cursor: 'pointer',
+                        borderBottom: '1px solid var(--dsw-alias-border-l1)',
+                        marginBottom: '4px',
+                      },
+                      onClick: () => {
+                        sendUnbindSlot(slot.slotIndex);
+                        closePopover();
+                      },
+                    },
+                    h('span', { style: { fontSize: '13px', lineHeight: 1 } }, '✕'),
+                    t('unbindSlot')
+                  )
+                : null,
+              projects.length === 0
+                ? h(
+                    'div',
+                    {
+                      'data-testid': 'no-projects-notice',
+                      style: {
+                        padding: '8px 12px',
+                        color: 'var(--dsw-alias-label-secondary)',
+                        fontStyle: 'italic',
+                      },
+                    },
+                    t('noAvailableSessions')
+                  )
+                : projects.map((project) => {
+                const isHovered = hoveredProject === project.id;
+                return h(
+                  'div',
+                  {
+                    key: project.id,
+                    className: 'peripheral-project-item',
+                    'data-testid': `project-item-${project.id}`,
+                    style: {
+                      position: 'relative',
+                      padding: '7px 12px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      cursor: 'pointer',
+                      background: isHovered
+                        ? 'var(--dsw-alias-interactive-bg-hover, rgba(128, 128, 128, 0.1))'
+                        : 'transparent',
+                      color: 'var(--dsw-alias-label-primary)',
+                      transition: 'background 0.1s ease',
+                    },
+                    onMouseEnter: () => setHoveredProject(project.id),
+                  },
+                  h(
+                    'div',
+                    {
+                      style: {
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        minWidth: 0,
+                      },
+                    },
+                    h('span', { style: { fontSize: '12px' } }, '📁'),
+                    h(
+                      'span',
+                      {
+                        style: {
+                          fontWeight: 500,
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap',
+                        },
+                      },
+                      project.name
+                    )
+                  ),
+                  h(
+                    'span',
+                    {
+                      style: {
+                        fontSize: '11px',
+                        color: 'var(--dsw-alias-label-secondary)',
+                        marginLeft: '8px',
+                      },
+                    },
+                    '›'
+                  ),
+                  isHovered
+                    ? h(
+                        'div',
+                        {
+                          className: 'peripheral-session-submenu',
+                          'data-testid': `session-submenu-${project.id}`,
+                          style: {
+                            position: 'absolute',
+                            left: 'calc(100% + 4px)',
+                            ...(isBottomHalf ? { bottom: 0 } : { top: 0 }),
+                            minWidth: '220px',
+                            maxWidth: '280px',
+                            maxHeight: '260px',
+                            overflowY: 'auto',
+                            background: 'var(--dsw-alias-bg-layer-1, #ffffff)',
+                            border: '1px solid var(--dsw-alias-border-l1)',
+                            borderRadius: '8px',
+                            boxShadow: '0 8px 24px rgba(0, 0, 0, 0.2)',
+                            padding: '4px 0',
+                            zIndex: 10000,
+                          },
+                          onClick: (e: any) => e.stopPropagation(),
+                        },
+                        project.sessions.length === 0
+                          ? h(
+                              'div',
+                              {
+                                style: {
+                                  padding: '8px 12px',
+                                  color: 'var(--dsw-alias-label-secondary)',
+                                  fontStyle: 'italic',
+                                },
+                              },
+                              t('noAvailableSessions')
+                            )
+                          : project.sessions.map((sess) => {
+                              const boundSlot = current.slots.find(
+                                (s) => s.sessionId === sess.id
+                              );
+                              const isCurrentSlot = boundSlot?.slotIndex === slot.slotIndex;
+                              return h(
+                                'div',
+                                {
+                                  key: sess.id,
+                                  className: 'peripheral-session-item',
+                                  'data-testid': `session-item-${sess.id}`,
+                                  style: {
+                                    padding: '7px 12px',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'space-between',
+                                    cursor: 'pointer',
+                                    gap: '8px',
+                                    background: isCurrentSlot
+                                      ? 'rgba(56, 189, 248, 0.12)'
+                                      : 'transparent',
+                                    color: 'var(--dsw-alias-label-primary)',
+                                    transition: 'background 0.1s ease',
+                                  },
+                                  onMouseEnter: (e: any) => {
+                                    e.currentTarget.style.background =
+                                      'var(--dsw-alias-interactive-bg-hover, rgba(128, 128, 128, 0.1))';
+                                  },
+                                  onMouseLeave: (e: any) => {
+                                    e.currentTarget.style.background = isCurrentSlot
+                                      ? 'rgba(56, 189, 248, 0.12)'
+                                      : 'transparent';
+                                  },
+                                  onClick: () => {
+                                    sendBindSlot(slot.slotIndex, sess.id, sess.title, true);
+                                    closePopover();
+                                  },
+                                },
+                                h(
+                                  'span',
+                                  {
+                                    style: {
+                                      minWidth: 0,
+                                      overflow: 'hidden',
+                                      textOverflow: 'ellipsis',
+                                      whiteSpace: 'nowrap',
+                                      flex: 1,
+                                    },
+                                  },
+                                  sess.title
+                                ),
+                                boundSlot
+                                  ? h(
+                                      'span',
+                                      {
+                                        style: {
+                                          fontSize: '10px',
+                                          fontWeight: 600,
+                                          padding: '1px 5px',
+                                          borderRadius: '4px',
+                                          background:
+                                            boundSlot.slotIndex === slot.slotIndex
+                                              ? 'var(--dsw-alias-state-business-primary, #38bdf8)'
+                                              : 'var(--dsw-alias-interactive-bg-hover, rgba(128, 128, 128, 0.2))',
+                                          color:
+                                            boundSlot.slotIndex === slot.slotIndex
+                                              ? '#ffffff'
+                                              : 'var(--dsw-alias-label-secondary)',
+                                          whiteSpace: 'nowrap',
+                                        },
+                                      },
+                                      `F${boundSlot.slotIndex}`
+                                    )
+                                  : null
+                              );
+                            })
+                      )
+                    : null
+                );
+              })
+            );
+          }
+
           /**
            * Render one slot row in the upper status table.
            */
@@ -1272,7 +1924,11 @@ if (win?.__ModuleLoader__) {
             slot: UiSlot,
             current: UiState,
             hoveredSlot: number | null,
-            setHoveredSlot: (s: number | null) => void
+            setHoveredSlot: (s: number | null) => void,
+            popoverSlot: number | null,
+            setPopoverSlot: (s: number | null) => void,
+            hoveredProject: string | null,
+            setHoveredProject: (p: string | null) => void
           ) {
             const focused = slot.slotIndex === current.focusedSlot;
             const isHovered = slot.slotIndex === hoveredSlot;
@@ -1297,7 +1953,15 @@ if (win?.__ModuleLoader__) {
                   }
                 },
                 style: {
+                  position: 'relative',
+                  zIndex: popoverSlot === slot.slotIndex ? 100 : 1,
                   padding: '9px 14px',
+                  borderRadius:
+                    slot.slotIndex === 1
+                      ? '9px 9px 0 0'
+                      : slot.slotIndex === TOTAL_SLOTS
+                      ? '0 0 9px 9px'
+                      : '0',
                   borderTop: slot.slotIndex === 1 ? 'none' : '1px solid var(--dsw-alias-border-l1)',
                   borderLeft: focused
                     ? '3px solid var(--dsw-alias-state-business-primary, #38bdf8)'
@@ -1337,23 +2001,161 @@ if (win?.__ModuleLoader__) {
                 },
                 `F${slot.slotIndex}`
               ),
-              // 2. Session ID
+              // 2. Session Column (Tab Card or Placeholder with Dropdown Popover)
               h(
-                'span',
+                'div',
                 {
+                  className: 'peripheral-session-trigger',
                   style: {
-                    fontFamily:
-                      'var(--dsw-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace)',
-                    fontSize: '12px',
-                    color: slot.sessionId
-                      ? 'var(--dsw-alias-label-primary)'
-                      : 'var(--dsw-alias-label-secondary)',
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    whiteSpace: 'nowrap',
+                    position: 'relative',
+                    display: 'flex',
+                    alignItems: 'center',
+                    width: '100%',
+                    maxWidth: '100%',
+                    minWidth: 0,
+                    zIndex: popoverSlot === slot.slotIndex ? 1000 : 'auto',
                   },
                 },
-                shortSession
+                slot.sessionId
+                  ? h(
+                      'div',
+                      {
+                        role: 'button',
+                        tabIndex: 0,
+                        'data-testid': `session-card-${slot.slotIndex}`,
+                        title: `${slot.sessionTitle || slot.sessionId} · ${t('clickToBindSession')}`,
+                        style: {
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          padding: '2px 8px 2px 10px',
+                          borderRadius: '6px',
+                          border: '1px solid var(--dsw-alias-border-l1)',
+                          background:
+                            'var(--dsw-alias-bg-layer-2, rgba(128, 128, 128, 0.08))',
+                          boxShadow: '0 1px 2px rgba(0, 0, 0, 0.04)',
+                          width: 'fit-content',
+                          maxWidth: '100%',
+                          boxSizing: 'border-box',
+                          cursor: 'pointer',
+                          transition: 'background 0.15s ease, border-color 0.15s ease',
+                        },
+                        onClick: (e: any) => {
+                          e.stopPropagation();
+                          setPopoverSlot(popoverSlot === slot.slotIndex ? null : slot.slotIndex);
+                          setHoveredProject(null);
+                        },
+                      },
+                      h(
+                        'span',
+                        {
+                          style: {
+                            fontSize: '12px',
+                            fontWeight: 500,
+                            color: 'var(--dsw-alias-label-primary)',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap',
+                            minWidth: 0,
+                            flex: 1,
+                          },
+                        },
+                        slot.sessionTitle || shortSession
+                      ),
+                      h(
+                        'span',
+                        {
+                          role: 'button',
+                          'data-testid': `unbind-btn-${slot.slotIndex}`,
+                          title: t('unbind'),
+                          style: {
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            width: '16px',
+                            height: '16px',
+                            borderRadius: '4px',
+                            color: 'var(--dsw-alias-label-secondary)',
+                            fontSize: '11px',
+                            lineHeight: 1,
+                            cursor: 'pointer',
+                            flexShrink: 0,
+                          },
+                          onMouseEnter: (e: any) => {
+                            e.currentTarget.style.color =
+                              'var(--dsw-alias-state-error-primary, #ef4444)';
+                            e.currentTarget.style.background = 'rgba(239, 68, 68, 0.12)';
+                          },
+                          onMouseLeave: (e: any) => {
+                            e.currentTarget.style.color = 'var(--dsw-alias-label-secondary)';
+                            e.currentTarget.style.background = 'transparent';
+                          },
+                          onClick: (e: any) => {
+                            e.stopPropagation();
+                            sendUnbindSlot(slot.slotIndex);
+                          },
+                        },
+                        '✕'
+                      )
+                    )
+                  : h(
+                      'div',
+                      {
+                        role: 'button',
+                        tabIndex: 0,
+                        'data-testid': `session-placeholder-${slot.slotIndex}`,
+                        title: t('clickToBindSession'),
+                        style: {
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          width: '100%',
+                          maxWidth: '100%',
+                          height: '24px',
+                          padding: '0 8px',
+                          borderRadius: '6px',
+                          border: '1px dashed var(--dsw-alias-border-l1)',
+                          color: 'var(--dsw-alias-label-secondary)',
+                          fontSize: '12px',
+                          cursor: 'pointer',
+                          background: 'transparent',
+                          boxSizing: 'border-box',
+                          transition:
+                            'border-color 0.15s ease, color 0.15s ease, background 0.15s ease',
+                        },
+                        onMouseEnter: (e: any) => {
+                          e.currentTarget.style.borderColor =
+                            'var(--dsw-alias-state-business-primary, #38bdf8)';
+                          e.currentTarget.style.color =
+                            'var(--dsw-alias-state-business-primary, #38bdf8)';
+                          e.currentTarget.style.background =
+                            'var(--dsw-alias-interactive-bg-hover, rgba(56, 189, 248, 0.06))';
+                        },
+                        onMouseLeave: (e: any) => {
+                          e.currentTarget.style.borderColor = 'var(--dsw-alias-border-l1)';
+                          e.currentTarget.style.color = 'var(--dsw-alias-label-secondary)';
+                          e.currentTarget.style.background = 'transparent';
+                        },
+                        onClick: (e: any) => {
+                          e.stopPropagation();
+                          setPopoverSlot(popoverSlot === slot.slotIndex ? null : slot.slotIndex);
+                          setHoveredProject(null);
+                        },
+                      },
+                      '—'
+                    ),
+                popoverSlot === slot.slotIndex
+                  ? renderSessionPickerPopover(
+                      slot,
+                      current,
+                      hoveredProject,
+                      setHoveredProject,
+                      () => {
+                        setPopoverSlot(null);
+                        setHoveredProject(null);
+                      }
+                    )
+                  : null
               ),
               // 3. Status indicator
               h(
@@ -1918,6 +2720,36 @@ if (win?.__ModuleLoader__) {
           function PeripheralPanel() {
             const current = useStore(store);
             const [hoveredSlot, setHoveredSlot] = React.useState(null as number | null);
+            const [popoverSlot, setPopoverSlot] = React.useState(null as number | null);
+            const [hoveredProject, setHoveredProject] = React.useState(null as string | null);
+
+            React.useEffect(() => {
+              if (popoverSlot === null) return;
+              function onDocClick(e: any) {
+                const target = e.target as HTMLElement | null;
+                if (
+                  !target?.closest?.('.peripheral-session-popover') &&
+                  !target?.closest?.('.peripheral-session-trigger')
+                ) {
+                  setPopoverSlot(null);
+                  setHoveredProject(null);
+                }
+              }
+              function onKeyDown(e: any) {
+                if (e.key === 'Escape') {
+                  setPopoverSlot(null);
+                  setHoveredProject(null);
+                }
+              }
+              if (typeof document !== 'undefined') {
+                document.addEventListener('click', onDocClick, true);
+                document.addEventListener('keydown', onKeyDown, true);
+                return () => {
+                  document.removeEventListener('click', onDocClick, true);
+                  document.removeEventListener('keydown', onKeyDown, true);
+                };
+              }
+            }, [popoverSlot]);
             const isDark = Boolean(current.darkMode ?? detectDarkMode());
 
             const rows: UiSlot[] = current.slots.length
@@ -2184,9 +3016,10 @@ if (win?.__ModuleLoader__) {
                   'div',
                   {
                     style: {
+                      position: 'relative',
                       border: '1px solid var(--dsw-alias-border-l1)',
                       borderRadius: '10px',
-                      overflow: 'hidden',
+                      overflow: 'visible',
                     },
                   },
                   h(
@@ -2201,6 +3034,7 @@ if (win?.__ModuleLoader__) {
                         color: 'var(--dsw-alias-label-secondary)',
                         background: 'var(--dsw-alias-bg-layer-1)',
                         borderBottom: '1px solid var(--dsw-alias-border-l1)',
+                        borderRadius: '9px 9px 0 0',
                       },
                     },
                     h('span', null, t('slot')),
@@ -2210,7 +3044,16 @@ if (win?.__ModuleLoader__) {
                     h('span', null, t('quickActions'))
                   ),
                   rows.map((row) =>
-                    renderSlotRow(row, current, hoveredSlot, setHoveredSlot)
+                    renderSlotRow(
+                      row,
+                      current,
+                      hoveredSlot,
+                      setHoveredSlot,
+                      popoverSlot,
+                      setPopoverSlot,
+                      hoveredProject,
+                      setHoveredProject
+                    )
                   )
                 ),
                 // Lower Half: Interactive NuPhy Air75 V3 Physical Keyboard Visualizer

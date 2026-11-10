@@ -272,6 +272,30 @@ export class PeripheralServerService extends Service {
         });
         return { success: true, slotIndex };
       },
+      onBindSlot: async (
+        slotIndex: number,
+        sessionId: string,
+        sessionTitle?: string,
+        pinned = true
+      ) => {
+        const bound = this.router.bindSlot(slotIndex, sessionId, sessionTitle, pinned);
+        if (!bound) {
+          throw new Error(`Failed to bind slot ${slotIndex}`);
+        }
+        return { success: true, slot: bound };
+      },
+      onUnbindSlot: async (slotIndex: number) => {
+        const slot = this.router.getSlot(slotIndex);
+        if (!slot) {
+          throw new Error(`Slot ${slotIndex} not found`);
+        }
+        this.arbiter.cancelBySlot(slotIndex);
+        this.router.releaseSlot(slotIndex);
+        return { success: true, slotIndex };
+      },
+      onGetProjects: async () => {
+        return { success: true, projects: this.getAvailableProjects() };
+      },
       onRestart: async () => {
         // Defer restarting slightly to allow JSON-RPC response frame to flush through WebSocket
         setTimeout(() => {
@@ -799,6 +823,126 @@ export class PeripheralServerService extends Service {
     } catch {
       // Hot-start hydration is best-effort and must not throw
     }
+  }
+
+  /**
+   * Retrieves dynamically discovered projects and sessions from DeepSeek Harness runtime or storage.
+   */
+  public getAvailableProjects(): Array<{ id: string; name: string; sessions: Array<{ id: string; title: string }> }> {
+    const getContextService = (key: string): any => {
+      try {
+        const fromGet =
+          typeof (this.ctx as any).get === 'function'
+            ? (this.ctx as any).get(key)
+            : undefined;
+        return fromGet ?? (this.ctx as any)[key];
+      } catch {
+        return (this.ctx as any)?.[key];
+      }
+    };
+
+    const sessionMap = new Map<string, string>();
+
+    // 1. Check live sessions from context services
+    try {
+      const sessionsStore = getContextService('sessions');
+      if (sessionsStore && typeof sessionsStore.list === 'function') {
+        const live = sessionsStore.list();
+        if (Array.isArray(live)) {
+          for (const s of live) {
+            if (s?.blank === true || s?.origin === 'subagent') continue;
+            const sid = typeof s === 'string' ? s : (s?.id ?? s?.sessionId);
+            const title = typeof s === 'object' ? (s?.title ?? s?.displayTitle ?? s?.name) : sid;
+            if (sid) sessionMap.set(sid, title || sid);
+          }
+        }
+      }
+    } catch {}
+
+    for (const s of this.router.getSnapshot().slots) {
+      if (s.sessionId) {
+        sessionMap.set(s.sessionId, s.sessionTitle || s.sessionId);
+      }
+    }
+
+    // 2. Query workspace from context if available
+    try {
+      const workspaceService = getContextService('workspaces') ?? getContextService('workspace');
+      const wsSnapshot =
+        typeof workspaceService?.list?.getSnapshot === 'function'
+          ? workspaceService.list.getSnapshot()
+          : typeof workspaceService?.getSnapshot === 'function'
+          ? workspaceService.getSnapshot()
+          : workspaceService;
+      const wsItems = wsSnapshot?.items || (Array.isArray(wsSnapshot) ? wsSnapshot : []);
+      if (Array.isArray(wsItems) && wsItems.length > 0) {
+        const projects: Array<{ id: string; name: string; sessions: Array<{ id: string; title: string }> }> = [];
+        for (const w of wsItems) {
+          const wsId = String(w.workspaceId || w.id || w.path || w.title || w.name);
+          const name = String(w.title || w.name || w.path || wsId);
+          const sessionIds: string[] = Array.isArray(w.sessionIds) ? w.sessionIds : [];
+          const sessions: Array<{ id: string; title: string }> = [];
+          for (const sid of sessionIds) {
+            const rawTitle = sessionMap.get(sid) || sid;
+            const t = String(rawTitle).trim().toLowerCase();
+            const n = name.trim().toLowerCase();
+            const idLower = wsId.trim().toLowerCase();
+            const sidLower = String(sid).trim().toLowerCase();
+            if (t === n || t === idLower || sidLower === n || sidLower === idLower) {
+              continue;
+            }
+            sessions.push({ id: sid, title: String(rawTitle) });
+          }
+          projects.push({ id: wsId, name, sessions });
+        }
+        if (projects.length > 0) return projects;
+      }
+    } catch {}
+
+    // 3. Fallback: query ~/.dsh/storages/workspace.json
+    try {
+      const dshHome = process.env.DSH_HOME || (process.env.HOME ? `${process.env.HOME}/.dsh` : null);
+      if (dshHome) {
+        const wsJsonPath = `${dshHome}/storages/workspace.json`;
+        const fs = require('fs');
+        if (fs.existsSync(wsJsonPath)) {
+          const raw = fs.readFileSync(wsJsonPath, 'utf8');
+          const data = JSON.parse(raw);
+          const wsObj = data?.tables?.workspaces;
+          if (wsObj && typeof wsObj === 'object') {
+            const projects: Array<{ id: string; name: string; sessions: Array<{ id: string; title: string }> }> = [];
+            for (const [wsId, item] of Object.entries<any>(wsObj)) {
+              const name = item.title || item.name || wsId;
+              const sessionIds: string[] = Array.isArray(item.sessionIds) ? item.sessionIds : [];
+              const sessions: Array<{ id: string; title: string }> = [];
+              for (const sid of sessionIds) {
+                const rawTitle = sessionMap.get(sid) || sid;
+                const t = String(rawTitle).trim().toLowerCase();
+                const n = name.trim().toLowerCase();
+                const idLower = wsId.trim().toLowerCase();
+                const sidLower = String(sid).trim().toLowerCase();
+                if (t === n || t === idLower || sidLower === n || sidLower === idLower) {
+                  continue;
+                }
+                sessions.push({ id: sid, title: String(rawTitle) });
+              }
+              projects.push({ id: wsId, name, sessions });
+            }
+            if (projects.length > 0) return projects;
+          }
+        }
+      }
+    } catch {}
+
+    if (sessionMap.size > 0) {
+      const sessions: Array<{ id: string; title: string }> = [];
+      for (const [id, title] of sessionMap.entries()) {
+        sessions.push({ id, title });
+      }
+      return [{ id: 'default', name: '工作区', sessions }];
+    }
+
+    return [];
   }
 
   /**

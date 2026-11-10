@@ -127,4 +127,47 @@ describe('SessionRouter', () => {
     expect(promoted?.sessionId).toBe('session-3');
     expect(router.getOverflowCount()).toBe(0);
   });
+
+  it('bindSlot explicitly pins session and migrates from old slot', () => {
+    const router = new SessionRouter();
+    router.allocateSlot('sess-test', AgentPeripheralStatus.IDLE);
+    expect(router.getSlot(1)?.sessionId).toBe('sess-test');
+
+    // Bind sess-test to slot 5 with title
+    const bound = router.bindSlot(5, 'sess-test', 'My Pinned Session', true);
+    expect(bound?.slotIndex).toBe(5);
+    expect(bound?.sessionId).toBe('sess-test');
+    expect(bound?.sessionTitle).toBe('My Pinned Session');
+    expect(bound?.pinned).toBe(true);
+
+    // Old slot 1 must be automatically released (auto-migrated)
+    expect(router.getSlot(1)?.sessionId).toBeNull();
+    expect(router.getSlot(1)?.status).toBe(AgentPeripheralStatus.INACTIVE);
+
+    // Releasing slot 5 clears pinned status and title
+    const released = router.releaseSlot(5);
+    expect(released?.sessionId).toBeNull();
+    expect(released?.pinned).toBe(false);
+    expect(released?.sessionTitle).toBeUndefined();
+  });
+
+  it('pinned slots are protected from LRU eviction', () => {
+    const router = new SessionRouter();
+    for (let i = 1; i <= 12; i++) {
+      router.allocateSlot(`session-${i}`, AgentPeripheralStatus.IDLE);
+    }
+    router.switchFocus(1);
+
+    // Pin slot 2
+    router.bindSlot(2, 'session-pinned', 'Pinned Work', true);
+
+    // Slot 3 is completed and not pinned
+    router.updateSlot(3, { status: AgentPeripheralStatus.COMPLETED });
+
+    // Allocate 13th session - slot 3 should be evicted, slot 2 must be protected
+    const newSlot = router.allocateSlot('session-new', AgentPeripheralStatus.IDLE);
+    expect(newSlot.slotIndex).toBe(3);
+    expect(router.getSlot(2)?.sessionId).toBe('session-pinned');
+    expect(router.getSlot(2)?.pinned).toBe(true);
+  });
 });

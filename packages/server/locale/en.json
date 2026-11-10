@@ -39,5 +39,11 @@
   "restartService": "Restart Service",
   "dormantNotice": "Peripheral bridge service is stopped. You can click 'Hot Start' at any time to resume hardware sync without restarting DeepSeek Harness.",
   "serviceRunning": "Service Running",
-  "serviceStopped": "Service Stopped"
+  "serviceStopped": "Service Stopped",
+  "unbind": "Unbind",
+  "unbindSlot": "Unbind Slot",
+  "clickToBindSession": "Click to assign session",
+  "boundToSlot": "Bound to",
+  "noAvailableSessions": "No available sessions",
+  "noProjects": "No projects"
 }

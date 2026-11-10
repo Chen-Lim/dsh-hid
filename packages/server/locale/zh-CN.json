@@ -39,5 +39,11 @@
   "restartService": "重启服务",
   "dormantNotice": "外设桥接服务已关闭。无须重启 DeepSeek Harness，点击“热启动服务”即可随时恢复外设硬件指示与按键交互。",
   "serviceRunning": "服务运行中",
-  "serviceStopped": "服务已停止"
+  "serviceStopped": "服务已停止",
+  "unbind": "解绑",
+  "unbindSlot": "解除当前绑定",
+  "clickToBindSession": "点击分配会话",
+  "boundToSlot": "已绑定至",
+  "noAvailableSessions": "暂无可用会话",
+  "noProjects": "暂无项目"
 }

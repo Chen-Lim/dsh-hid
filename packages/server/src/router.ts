@@ -46,6 +46,8 @@ export class SessionRouter {
         status: AgentPeripheralStatus.INACTIVE,
         brainpower: 'medium',
         lastAccessedAt: now,
+        pinned: false,
+        sessionTitle: undefined,
       });
     }
   }
@@ -180,9 +182,9 @@ export class SessionRouter {
       }
     }
 
-    // 3. All slots occupied: LRU eviction (protect current focusedSlot)
+    // 3. All slots occupied: LRU eviction (protect current focusedSlot and pinned slots)
     const candidates = Array.from(this.slots.values()).filter(
-      (s) => s.slotIndex !== this.focusedSlot
+      (s) => s.slotIndex !== this.focusedSlot && !s.pinned
     );
 
     // Prioritize evicting completed / error / idle before active ones
@@ -200,12 +202,17 @@ export class SessionRouter {
       return a.lastAccessedAt - b.lastAccessedAt;
     });
 
-    const targetSlot = candidates[0] ?? this.slots.get(this.focusedSlot)!;
+    const fallbackCandidate = !this.slots.get(this.focusedSlot)?.pinned
+      ? this.slots.get(this.focusedSlot)!
+      : Array.from(this.slots.values()).sort((a, b) => a.lastAccessedAt - b.lastAccessedAt)[0];
+    const targetSlot = candidates[0] ?? fallbackCandidate;
     if (targetSlot.sessionId) {
       this.overflowSessions.add(targetSlot.sessionId);
     }
 
     targetSlot.sessionId = sessionId;
+    targetSlot.sessionTitle = undefined;
+    targetSlot.pinned = false;
     targetSlot.status = initialStatus;
     targetSlot.brainpower = brainpower;
     targetSlot.activeTool = undefined;
@@ -213,6 +220,44 @@ export class SessionRouter {
     targetSlot.lastAccessedAt = now;
 
     const sanitized = this.sanitizeSlot(targetSlot);
+    this.notifySlotUpdate(sanitized);
+    return sanitized;
+  }
+
+  /**
+   * Explicitly binds a physical slot to a session (marking it as pinned by default).
+   * If the session is already bound to another slot, it is automatically migrated (released from old slot).
+   */
+  public bindSlot(
+    slotIndex: number,
+    sessionId: string,
+    sessionTitle?: string,
+    pinned: boolean = true
+  ): SlotInfo | null {
+    if (slotIndex < MIN_SLOT_INDEX || slotIndex > this.totalSlots) {
+      return null;
+    }
+
+    // 1. Auto-migration: if session is already assigned to a different slot, release that slot
+    for (const internal of this.slots.values()) {
+      if (internal.sessionId === sessionId && internal.slotIndex !== slotIndex) {
+        this.releaseSlot(internal.slotIndex);
+      }
+    }
+
+    this.overflowSessions.delete(sessionId);
+
+    // 2. Bind to target slot
+    const target = this.slots.get(slotIndex)!;
+    target.sessionId = sessionId;
+    target.sessionTitle = sessionTitle !== undefined ? sessionTitle : target.sessionTitle;
+    target.pinned = pinned;
+    if (target.status === AgentPeripheralStatus.INACTIVE) {
+      target.status = AgentPeripheralStatus.IDLE;
+    }
+    target.lastAccessedAt = Date.now();
+
+    const sanitized = this.sanitizeSlot(target);
     this.notifySlotUpdate(sanitized);
     return sanitized;
   }
@@ -239,6 +284,8 @@ export class SessionRouter {
     if (!internal) return null;
 
     internal.sessionId = null;
+    internal.sessionTitle = undefined;
+    internal.pinned = false;
     internal.status = AgentPeripheralStatus.INACTIVE;
     internal.activeTool = undefined;
     internal.question = undefined;
@@ -301,6 +348,8 @@ export class SessionRouter {
     if ('activeTool' in patch) internal.activeTool = patch.activeTool;
     if ('question' in patch) internal.question = patch.question;
     if ('sessionId' in patch) internal.sessionId = patch.sessionId;
+    if (patch.pinned !== undefined) internal.pinned = patch.pinned;
+    if ('sessionTitle' in patch) internal.sessionTitle = patch.sessionTitle;
     internal.lastAccessedAt = Date.now();
 
     const sanitized = this.sanitizeSlot(internal);
@@ -331,6 +380,8 @@ export class SessionRouter {
       brainpower: internal.brainpower,
       activeTool: internal.activeTool,
       question: internal.question,
+      pinned: internal.pinned,
+      sessionTitle: internal.sessionTitle,
     };
   }
 
